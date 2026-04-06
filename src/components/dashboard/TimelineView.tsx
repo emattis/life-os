@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { formatTime } from "@/lib/utils";
 
 interface Block {
@@ -195,9 +196,20 @@ function CurrentTimeIndicator({
   startOfDay: number;
   totalMinutes: number;
 }) {
-  const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const [currentMinutes, setCurrentMinutes] = useState<number | null>(null);
+
+  useEffect(() => {
+    const update = () => {
+      const now = new Date();
+      setCurrentMinutes(now.getHours() * 60 + now.getMinutes());
+    };
+    update();
+    const interval = setInterval(update, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   if (
+    currentMinutes === null ||
     currentMinutes < startOfDay ||
     currentMinutes > startOfDay + totalMinutes
   )

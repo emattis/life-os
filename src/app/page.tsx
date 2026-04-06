@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { TimelineView } from "@/components/dashboard/TimelineView";
@@ -65,13 +65,6 @@ interface TaskItem {
   energyLevel: string;
 }
 
-function getGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
-}
-
 interface CalendarEventItem {
   id: string;
   title: string;
@@ -80,16 +73,77 @@ interface CalendarEventItem {
   allDay: boolean;
 }
 
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+function getToday(): string {
+  return new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
 export default function Dashboard() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Render a static shell on the server that matches the first client render
+  if (!mounted) {
+    return <DashboardSkeleton />;
+  }
+
+  return <DashboardContent />;
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="flex flex-col lg:flex-row gap-6 max-w-full">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between mb-8">
+          <div>
+            <div className="h-9 bg-border/30 rounded w-48 mb-2" />
+            <div className="h-4 bg-border/20 rounded w-64" />
+          </div>
+          <div className="h-10 bg-accent/30 rounded-lg w-44" />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-card rounded-xl border border-border p-4">
+              <div className="h-3 bg-border/30 rounded w-20 mb-2" />
+              <div className="h-8 bg-border/20 rounded w-8" />
+            </div>
+          ))}
+        </div>
+        <div className="bg-card rounded-xl border border-border p-4 mb-6 h-12" />
+        <div className="bg-card rounded-xl border border-border p-5 h-64 mb-6" />
+        <div className="bg-card rounded-xl border border-border p-5 h-48" />
+      </div>
+      <div className="w-full lg:w-72 shrink-0 space-y-4">
+        <div className="bg-card rounded-xl border border-border p-4 h-[280px]" />
+        <div className="bg-card rounded-xl border border-border p-4 h-24" />
+        <div className="bg-card rounded-xl border border-border p-4 h-32" />
+      </div>
+    </div>
+  );
+}
+
+function DashboardContent() {
   const { data, mutate } = useSWR<DashboardData>("/api/dashboard", fetcher);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>([]);
-  const [, setCalendarSyncedAt] = useState<string>("");
   const { toast } = useToast();
 
   const handleCalendarLoaded = useCallback(
-    (events: CalendarEventItem[], syncedAt: string) => {
+    (events: CalendarEventItem[], _syncedAt: string) => {
       setCalendarEvents(events);
-      setCalendarSyncedAt(syncedAt);
     },
     []
   );
@@ -115,13 +169,8 @@ export default function Dashboard() {
     mutate();
   }, [mutate]);
 
-  const today = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-
+  const greeting = getGreeting();
+  const today = getToday();
   const stats = data?.stats;
   const isLoading = !data;
 
@@ -132,7 +181,7 @@ export default function Dashboard() {
         {/* Header */}
         <div className="flex items-start justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold">{getGreeting()}</h1>
+            <h1 className="text-3xl font-bold">{greeting}</h1>
             <p className="text-muted mt-1 font-mono text-sm">{today}</p>
           </div>
           <Link
@@ -226,9 +275,8 @@ function StatCard({
 }) {
   return (
     <div
-      className={`bg-card rounded-xl border p-4 ${
-        alert ? "border-red-400/30" : "border-border"
-      } ${className ?? ""}`}
+      className={`bg-card rounded-xl border border-border p-4 ${className ?? ""}`}
+      style={alert ? { borderColor: "rgba(248, 113, 113, 0.3)" } : undefined}
     >
       <p className="text-xs font-medium text-muted mb-1">{label}</p>
       {loading ? (

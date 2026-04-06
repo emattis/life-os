@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import useSWR from "swr";
 import { useSession } from "next-auth/react";
 
@@ -35,17 +35,24 @@ interface CalendarEventsProps {
 }
 
 export function CalendarEvents({ onEventsLoaded }: CalendarEventsProps) {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const [manualRefresh, setManualRefresh] = useState(0);
 
-  const today = new Date();
-  const timeMin = today.toISOString().split("T")[0] + "T00:00:00Z";
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const timeMax = tomorrow.toISOString().split("T")[0] + "T00:00:00Z";
+  // Safe to call new Date() here because this component only renders
+  // inside DashboardContent which is client-only (mounted guard in parent)
+  const { timeMin, timeMax } = useMemo(() => {
+    const today = new Date();
+    const min = today.toISOString().split("T")[0] + "T00:00:00Z";
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const max = tomorrow.toISOString().split("T")[0] + "T00:00:00Z";
+    return { timeMin: min, timeMax: max };
+  }, []);
+
+  const hasToken = !!session?.accessToken;
 
   const { data, mutate } = useSWR<CalendarResponse>(
-    session?.accessToken
+    hasToken
       ? `/api/calendar?timeMin=${timeMin}&timeMax=${timeMax}&_r=${manualRefresh}`
       : null,
     fetcher,
@@ -64,6 +71,20 @@ export function CalendarEvents({ onEventsLoaded }: CalendarEventsProps) {
     mutate();
   }, [mutate]);
 
+  // Still loading session
+  if (status === "loading") {
+    return (
+      <div className="bg-card rounded-xl border border-border p-4">
+        <h2 className="text-sm font-medium text-muted uppercase tracking-wider mb-2">
+          Google Calendar
+        </h2>
+        <p className="text-xs text-muted/60 text-center py-2 animate-pulse-subtle">
+          Loading...
+        </p>
+      </div>
+    );
+  }
+
   if (!session) {
     return (
       <div className="bg-card rounded-xl border border-border p-4">
@@ -79,6 +100,7 @@ export function CalendarEvents({ onEventsLoaded }: CalendarEventsProps) {
 
   const events = data?.events ?? [];
   const syncedAt = data?.syncedAt;
+  const hasError = data?.error;
 
   return (
     <div className="bg-card rounded-xl border border-border p-4">
@@ -95,7 +117,11 @@ export function CalendarEvents({ onEventsLoaded }: CalendarEventsProps) {
         </button>
       </div>
 
-      {events.length === 0 ? (
+      {hasError ? (
+        <p className="text-xs text-red-400/80 text-center py-2">
+          {data?.error}
+        </p>
+      ) : events.length === 0 ? (
         <p className="text-xs text-muted/60 text-center py-2">
           No events today
         </p>

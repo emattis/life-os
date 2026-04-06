@@ -1,11 +1,16 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 export function MiniCalendar() {
-  const [viewDate, setViewDate] = useState(new Date());
-  const today = new Date();
+  const [mounted, setMounted] = useState(false);
+  const [viewDate, setViewDate] = useState(() => new Date());
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const today = mounted ? new Date() : null;
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
 
@@ -29,7 +34,13 @@ export function MiniCalendar() {
   }
 
   const isCurrentMonth =
-    today.getFullYear() === year && today.getMonth() === month;
+    today && today.getFullYear() === year && today.getMonth() === month;
+
+  if (!mounted) {
+    return (
+      <div className="bg-card rounded-xl border border-border p-4 h-[280px] animate-pulse-subtle" />
+    );
+  }
 
   return (
     <div className="bg-card rounded-xl border border-border p-4">
@@ -64,12 +75,11 @@ export function MiniCalendar() {
 
       {/* Day grid */}
       <div className="grid grid-cols-7 gap-0">
-        {/* Empty cells before start of month */}
         {Array.from({ length: startDay }).map((_, i) => (
           <div key={`empty-${i}`} className="h-7" />
         ))}
         {days.map((day) => {
-          const isToday = isCurrentMonth && day === today.getDate();
+          const isToday = isCurrentMonth && today && day === today.getDate();
           return (
             <div
               key={day}

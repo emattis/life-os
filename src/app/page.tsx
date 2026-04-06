@@ -8,8 +8,9 @@ import { GoalSummary } from "@/components/dashboard/GoalSummary";
 import { TasksByType } from "@/components/dashboard/TasksByType";
 import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
 import { UpcomingEvents } from "@/components/dashboard/UpcomingEvents";
-import { QuickAddTask } from "@/components/dashboard/QuickAddTask";
 import { CalendarEvents } from "@/components/dashboard/CalendarEvents";
+import { CommandBar } from "@/components/dashboard/CommandBar";
+import { useToast } from "@/components/layout/Toast";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -83,6 +84,7 @@ export default function Dashboard() {
   const { data, mutate } = useSWR<DashboardData>("/api/dashboard", fetcher);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>([]);
   const [, setCalendarSyncedAt] = useState<string>("");
+  const { toast } = useToast();
 
   const handleCalendarLoaded = useCallback(
     (events: CalendarEventItem[], syncedAt: string) => {
@@ -94,27 +96,24 @@ export default function Dashboard() {
 
   const handleStatusChange = useCallback(
     async (id: string, status: string) => {
-      await fetch("/api/tasks", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status }),
-      });
-      mutate();
+      try {
+        await fetch("/api/tasks", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, status }),
+        });
+        if (status === "completed") toast("Task completed!");
+        mutate();
+      } catch {
+        toast("Failed to update task", "error");
+      }
     },
-    [mutate]
+    [mutate, toast]
   );
 
-  const handleQuickAdd = useCallback(
-    async (title: string) => {
-      await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, type: "to_do", priority: 3 }),
-      });
-      mutate();
-    },
-    [mutate]
-  );
+  const handleItemsCreated = useCallback(() => {
+    mutate();
+  }, [mutate]);
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -124,9 +123,10 @@ export default function Dashboard() {
   });
 
   const stats = data?.stats;
+  const isLoading = !data;
 
   return (
-    <div className="flex gap-6 max-w-full">
+    <div className="flex flex-col lg:flex-row gap-6 max-w-full">
       {/* Main content */}
       <div className="flex-1 min-w-0">
         {/* Header */}
@@ -144,33 +144,41 @@ export default function Dashboard() {
         </div>
 
         {/* Stat cards */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <StatCard
             label="Active Goals"
             value={stats?.activeGoals ?? 0}
             color="text-violet-400"
+            loading={isLoading}
+            className="animate-card-1"
           />
           <StatCard
             label="Pending Tasks"
             value={stats?.pendingTasks ?? 0}
             color="text-blue-400"
+            loading={isLoading}
+            className="animate-card-2"
           />
           <StatCard
             label="Today's Blocks"
             value={stats?.todayBlocks ?? 0}
             color="text-cyan-400"
+            loading={isLoading}
+            className="animate-card-3"
           />
           <StatCard
             label="Overdue"
             value={stats?.overdue ?? 0}
             color={stats?.overdue ? "text-red-400" : "text-muted"}
             alert={!!stats?.overdue}
+            loading={isLoading}
+            className="animate-card-4"
           />
         </div>
 
-        {/* Quick add */}
+        {/* AI Command Bar */}
         <div className="mb-6">
-          <QuickAddTask onAdd={handleQuickAdd} />
+          <CommandBar onItemsCreated={handleItemsCreated} />
         </div>
 
         {/* Timeline */}
@@ -191,7 +199,7 @@ export default function Dashboard() {
       </div>
 
       {/* Right panel */}
-      <div className="w-72 shrink-0 space-y-4 hidden lg:block">
+      <div className="w-full lg:w-72 shrink-0 space-y-4">
         <MiniCalendar />
         <CalendarEvents onEventsLoaded={handleCalendarLoaded} />
         <GoalSummary goals={data?.goals ?? []} />
@@ -206,20 +214,28 @@ function StatCard({
   value,
   color,
   alert,
+  loading,
+  className,
 }: {
   label: string;
   value: number;
   color: string;
   alert?: boolean;
+  loading?: boolean;
+  className?: string;
 }) {
   return (
     <div
       className={`bg-card rounded-xl border p-4 ${
         alert ? "border-red-400/30" : "border-border"
-      }`}
+      } ${className ?? ""}`}
     >
       <p className="text-xs font-medium text-muted mb-1">{label}</p>
-      <p className={`text-2xl font-bold ${color}`}>{value}</p>
+      {loading ? (
+        <div className="h-8 bg-border/30 rounded w-8 animate-pulse-subtle" />
+      ) : (
+        <p className={`text-2xl font-bold ${color}`}>{value}</p>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import useSWR from "swr";
 import { GoalForm, type GoalFormData } from "@/components/goals/GoalForm";
 import { GoalCard } from "@/components/goals/GoalCard";
+import { useToast } from "@/components/layout/Toast";
 
 interface GoalWithProgress {
   id: string;
@@ -42,6 +43,7 @@ export default function GoalsPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<GoalFormData | undefined>();
+  const { toast } = useToast();
 
   const params = new URLSearchParams();
   if (statusFilter) params.set("status", statusFilter);
@@ -53,24 +55,30 @@ export default function GoalsPage() {
 
   const handleSubmit = useCallback(
     async (data: GoalFormData) => {
-      if (data.id) {
-        await fetch("/api/goals", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
-        });
-      } else {
-        await fetch("/api/goals", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
-        });
+      try {
+        if (data.id) {
+          await fetch("/api/goals", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+          toast("Goal updated");
+        } else {
+          await fetch("/api/goals", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+          toast("Goal created");
+        }
+        setShowForm(false);
+        setEditing(undefined);
+        mutate();
+      } catch {
+        toast("Failed to save goal", "error");
       }
-      setShowForm(false);
-      setEditing(undefined);
-      mutate();
     },
-    [mutate]
+    [mutate, toast]
   );
 
   const handleEdit = useCallback((goal: GoalWithProgress) => {
@@ -90,23 +98,33 @@ export default function GoalsPage() {
 
   const handleArchive = useCallback(
     async (id: string, currentStatus: string) => {
-      const newStatus = currentStatus === "paused" ? "active" : "paused";
-      await fetch("/api/goals", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status: newStatus }),
-      });
-      mutate();
+      try {
+        const newStatus = currentStatus === "paused" ? "active" : "paused";
+        await fetch("/api/goals", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, status: newStatus }),
+        });
+        toast(newStatus === "paused" ? "Goal paused" : "Goal resumed");
+        mutate();
+      } catch {
+        toast("Failed to update goal", "error");
+      }
     },
-    [mutate]
+    [mutate, toast]
   );
 
   const handleDelete = useCallback(
     async (id: string) => {
-      await fetch(`/api/goals?id=${id}`, { method: "DELETE" });
-      mutate();
+      try {
+        await fetch(`/api/goals?id=${id}`, { method: "DELETE" });
+        toast("Goal deleted");
+        mutate();
+      } catch {
+        toast("Failed to delete goal", "error");
+      }
     },
-    [mutate]
+    [mutate, toast]
   );
 
   const handleCancel = useCallback(() => {
@@ -114,7 +132,6 @@ export default function GoalsPage() {
     setEditing(undefined);
   }, []);
 
-  // Summary stats
   const activeCount = goals?.filter((g) => g.status === "active").length ?? 0;
   const totalProgress =
     goals && goals.length > 0
@@ -123,7 +140,6 @@ export default function GoalsPage() {
 
   return (
     <div className="max-w-5xl">
-      {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold">Goals</h1>
@@ -149,9 +165,8 @@ export default function GoalsPage() {
         )}
       </div>
 
-      {/* Form */}
       {showForm && (
-        <div className="bg-card rounded-xl border border-border p-6 mb-8">
+        <div className="bg-card rounded-xl border border-border p-6 mb-8 animate-fade-in-up">
           <h2 className="text-lg font-semibold mb-4">
             {editing?.id ? "Edit Goal" : "New Goal"}
           </h2>
@@ -163,8 +178,7 @@ export default function GoalsPage() {
         </div>
       )}
 
-      {/* Filters */}
-      <div className="flex gap-3 mb-6">
+      <div className="flex flex-wrap gap-3 mb-6">
         <div className="flex gap-1 bg-card rounded-lg border border-border p-1">
           {STATUS_FILTERS.map((f) => (
             <button
@@ -193,12 +207,12 @@ export default function GoalsPage() {
         </select>
       </div>
 
-      {/* Goal Grid */}
       {!goals ? (
-        <div className="text-muted text-sm">Loading goals...</div>
+        <LoadingSkeleton />
       ) : goals.length === 0 ? (
-        <div className="bg-card rounded-xl border border-border p-12 text-center">
-          <p className="text-muted text-sm mb-1">No goals found</p>
+        <div className="bg-card rounded-xl border border-border p-12 text-center animate-fade-in">
+          <div className="text-3xl mb-3">◎</div>
+          <p className="text-foreground font-medium mb-1">No goals found</p>
           <p className="text-muted/60 text-xs">
             {statusFilter || categoryFilter
               ? "Try adjusting your filters"
@@ -218,6 +232,24 @@ export default function GoalsPage() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {[1, 2, 3].map((i) => (
+        <div
+          key={i}
+          className="bg-card rounded-xl border border-border p-5 animate-pulse-subtle"
+        >
+          <div className="h-3 bg-border/50 rounded w-1/4 mb-3" />
+          <div className="h-4 bg-border/50 rounded w-2/3 mb-2" />
+          <div className="h-3 bg-border/30 rounded w-full mb-4" />
+          <div className="h-1.5 bg-border/30 rounded-full w-full" />
+        </div>
+      ))}
     </div>
   );
 }

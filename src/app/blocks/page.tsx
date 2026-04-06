@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import useSWR from "swr";
 import { BlockForm, type BlockFormData } from "@/components/blocks/BlockForm";
 import { BlockCard } from "@/components/blocks/BlockCard";
+import { useToast } from "@/components/layout/Toast";
 
 interface Block {
   id: string;
@@ -22,27 +23,34 @@ export default function BlocksPage() {
   const { data: blocks, mutate } = useSWR<Block[]>("/api/blocks", fetcher);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<BlockFormData | undefined>();
+  const { toast } = useToast();
 
   const handleSubmit = useCallback(
     async (data: BlockFormData) => {
-      if (data.id) {
-        await fetch("/api/blocks", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
-        });
-      } else {
-        await fetch("/api/blocks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data),
-        });
+      try {
+        if (data.id) {
+          await fetch("/api/blocks", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+          toast("Block updated");
+        } else {
+          await fetch("/api/blocks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+          toast("Block created");
+        }
+        setShowForm(false);
+        setEditing(undefined);
+        mutate();
+      } catch {
+        toast("Failed to save block", "error");
       }
-      setShowForm(false);
-      setEditing(undefined);
-      mutate();
     },
-    [mutate]
+    [mutate, toast]
   );
 
   const handleEdit = useCallback((block: Block) => {
@@ -61,10 +69,15 @@ export default function BlocksPage() {
 
   const handleDelete = useCallback(
     async (id: string) => {
-      await fetch(`/api/blocks?id=${id}`, { method: "DELETE" });
-      mutate();
+      try {
+        await fetch(`/api/blocks?id=${id}`, { method: "DELETE" });
+        toast("Block deleted");
+        mutate();
+      } catch {
+        toast("Failed to delete block", "error");
+      }
     },
-    [mutate]
+    [mutate, toast]
   );
 
   const handleCancel = useCallback(() => {
@@ -83,14 +96,7 @@ export default function BlocksPage() {
     {}
   );
 
-  const categoryOrder = [
-    "sleep",
-    "exercise",
-    "meal",
-    "commute",
-    "work",
-    "routine",
-  ];
+  const categoryOrder = ["sleep", "exercise", "meal", "commute", "work", "routine"];
   const sortedCategories = Object.keys(grouped).sort(
     (a, b) => categoryOrder.indexOf(a) - categoryOrder.indexOf(b)
   );
@@ -127,7 +133,7 @@ export default function BlocksPage() {
       </div>
 
       {showForm && (
-        <div className="bg-card rounded-xl border border-border p-6 mb-8">
+        <div className="bg-card rounded-xl border border-border p-6 mb-8 animate-fade-in-up">
           <h2 className="text-lg font-semibold mb-4">
             {editing?.id ? "Edit Block" : "New Block"}
           </h2>
@@ -140,10 +146,11 @@ export default function BlocksPage() {
       )}
 
       {!blocks ? (
-        <div className="text-muted text-sm">Loading blocks...</div>
+        <LoadingSkeleton />
       ) : blocks.length === 0 ? (
-        <div className="bg-card rounded-xl border border-border p-12 text-center">
-          <p className="text-muted text-sm mb-1">No blocks defined yet</p>
+        <div className="bg-card rounded-xl border border-border p-12 text-center animate-fade-in">
+          <div className="text-3xl mb-3">▦</div>
+          <p className="text-foreground font-medium mb-1">No blocks defined yet</p>
           <p className="text-muted/60 text-xs">
             Add your daily routines like sleep, meals, workouts, and commute
           </p>
@@ -151,7 +158,7 @@ export default function BlocksPage() {
       ) : (
         <div className="space-y-8">
           {sortedCategories.map((cat) => (
-            <div key={cat}>
+            <div key={cat} className="animate-fade-in-up">
               <h2 className="text-sm font-medium text-muted uppercase tracking-wider mb-3">
                 {CATEGORY_LABELS[cat] ?? cat}
               </h2>
@@ -169,6 +176,22 @@ export default function BlocksPage() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4">
+      {[1, 2, 3].map((i) => (
+        <div
+          key={i}
+          className="bg-card rounded-xl border border-border p-6 animate-pulse-subtle"
+        >
+          <div className="h-4 bg-border/50 rounded w-1/3 mb-3" />
+          <div className="h-3 bg-border/30 rounded w-1/2" />
+        </div>
+      ))}
     </div>
   );
 }

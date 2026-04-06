@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import useSWR from "swr";
 import { TaskForm, type TaskFormData } from "@/components/tasks/TaskForm";
 import { TaskCard } from "@/components/tasks/TaskCard";
+import { useToast } from "@/components/layout/Toast";
 
 interface TaskGoal {
   id: string;
@@ -67,8 +68,8 @@ export default function TasksPage() {
   const [goalFilter, setGoalFilter] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<TaskFormData | undefined>();
+  const { toast } = useToast();
 
-  // Build query string
   const params = new URLSearchParams();
   if (typeFilter) params.set("type", typeFilter);
   if (statusFilter) params.set("status", statusFilter);
@@ -85,34 +86,40 @@ export default function TasksPage() {
 
   const handleSubmit = useCallback(
     async (data: TaskFormData) => {
-      const payload = {
-        ...data,
-        goalId: data.goalId || null,
-        recurring: data.recurring || null,
-        tags: data.tags || null,
-        dueDate: data.dueDate || null,
-        scheduledDate: data.scheduledDate || null,
-        description: data.description || null,
-      };
+      try {
+        const payload = {
+          ...data,
+          goalId: data.goalId || null,
+          recurring: data.recurring || null,
+          tags: data.tags || null,
+          dueDate: data.dueDate || null,
+          scheduledDate: data.scheduledDate || null,
+          description: data.description || null,
+        };
 
-      if (data.id) {
-        await fetch("/api/tasks", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      } else {
-        await fetch("/api/tasks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+        if (data.id) {
+          await fetch("/api/tasks", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          toast("Task updated");
+        } else {
+          await fetch("/api/tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          toast("Task created");
+        }
+        setShowForm(false);
+        setEditing(undefined);
+        mutate();
+      } catch {
+        toast("Failed to save task", "error");
       }
-      setShowForm(false);
-      setEditing(undefined);
-      mutate();
     },
-    [mutate]
+    [mutate, toast]
   );
 
   const handleEdit = useCallback((task: Task) => {
@@ -139,22 +146,32 @@ export default function TasksPage() {
 
   const handleStatusChange = useCallback(
     async (id: string, status: string) => {
-      await fetch("/api/tasks", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status }),
-      });
-      mutate();
+      try {
+        await fetch("/api/tasks", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, status }),
+        });
+        if (status === "completed") toast("Task completed!");
+        mutate();
+      } catch {
+        toast("Failed to update task", "error");
+      }
     },
-    [mutate]
+    [mutate, toast]
   );
 
   const handleDelete = useCallback(
     async (id: string) => {
-      await fetch(`/api/tasks?id=${id}`, { method: "DELETE" });
-      mutate();
+      try {
+        await fetch(`/api/tasks?id=${id}`, { method: "DELETE" });
+        toast("Task deleted");
+        mutate();
+      } catch {
+        toast("Failed to delete task", "error");
+      }
     },
-    [mutate]
+    [mutate, toast]
   );
 
   const handleCancel = useCallback(() => {
@@ -162,7 +179,6 @@ export default function TasksPage() {
     setEditing(undefined);
   }, []);
 
-  // Summary stats
   const pending = tasks?.filter((t) => t.status === "pending").length ?? 0;
   const inProgress =
     tasks?.filter((t) => t.status === "in_progress").length ?? 0;
@@ -176,7 +192,6 @@ export default function TasksPage() {
 
   return (
     <div className="max-w-5xl">
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold">Tasks</h1>
@@ -204,9 +219,8 @@ export default function TasksPage() {
         )}
       </div>
 
-      {/* Form */}
       {showForm && (
-        <div className="bg-card rounded-xl border border-border p-6 mb-6">
+        <div className="bg-card rounded-xl border border-border p-6 mb-6 animate-fade-in-up">
           <h2 className="text-lg font-semibold mb-4">
             {editing?.id ? "Edit Task" : "New Task"}
           </h2>
@@ -218,15 +232,13 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
-        {/* Status tabs */}
-        <div className="flex gap-1 bg-card rounded-lg border border-border p-1">
+        <div className="flex gap-1 bg-card rounded-lg border border-border p-1 overflow-x-auto">
           {STATUS_FILTERS.map((f) => (
             <button
               key={f.value}
               onClick={() => setStatusFilter(f.value)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
                 statusFilter === f.value
                   ? "bg-accent/15 text-accent"
                   : "text-muted hover:text-foreground"
@@ -237,7 +249,6 @@ export default function TasksPage() {
           ))}
         </div>
 
-        {/* Type filter */}
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
@@ -250,7 +261,6 @@ export default function TasksPage() {
           ))}
         </select>
 
-        {/* Priority filter */}
         <select
           value={priorityFilter}
           onChange={(e) => setPriorityFilter(e.target.value)}
@@ -263,7 +273,6 @@ export default function TasksPage() {
           ))}
         </select>
 
-        {/* Goal filter */}
         {goals && goals.length > 0 && (
           <select
             value={goalFilter}
@@ -279,7 +288,6 @@ export default function TasksPage() {
           </select>
         )}
 
-        {/* Clear filters */}
         {(typeFilter || statusFilter || priorityFilter || goalFilter) && (
           <button
             onClick={() => {
@@ -295,12 +303,12 @@ export default function TasksPage() {
         )}
       </div>
 
-      {/* Task List */}
       {!tasks ? (
-        <div className="text-muted text-sm">Loading tasks...</div>
+        <LoadingSkeleton />
       ) : tasks.length === 0 ? (
-        <div className="bg-card rounded-xl border border-border p-12 text-center">
-          <p className="text-muted text-sm mb-1">No tasks found</p>
+        <div className="bg-card rounded-xl border border-border p-12 text-center animate-fade-in">
+          <div className="text-3xl mb-3">☑</div>
+          <p className="text-foreground font-medium mb-1">No tasks found</p>
           <p className="text-muted/60 text-xs">
             {typeFilter || statusFilter || priorityFilter || goalFilter
               ? "Try adjusting your filters"
@@ -320,6 +328,26 @@ export default function TasksPage() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {[1, 2, 3, 4].map((i) => (
+        <div
+          key={i}
+          className="bg-card rounded-xl border border-border p-4 animate-pulse-subtle"
+        >
+          <div className="flex gap-2 mb-3">
+            <div className="h-3 bg-border/50 rounded w-16" />
+            <div className="h-3 bg-border/50 rounded w-12" />
+          </div>
+          <div className="h-4 bg-border/50 rounded w-2/3 mb-2" />
+          <div className="h-3 bg-border/30 rounded w-1/2" />
+        </div>
+      ))}
     </div>
   );
 }

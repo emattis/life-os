@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { formatTime } from "@/lib/utils";
+import { useToast } from "@/components/layout/Toast";
 import type { OptimizedSchedule, ScheduleEntry } from "@/types";
 
 const TYPE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
@@ -28,6 +29,7 @@ export default function OptimizePage() {
   const [error, setError] = useState<string | null>(null);
   const [accepted, setAccepted] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  const { toast } = useToast();
 
   const handleOptimize = useCallback(async () => {
     setLoading(true);
@@ -44,15 +46,18 @@ export default function OptimizePage() {
       const data = await res.json();
       if (data.error) {
         setError(data.error);
+        toast("Optimization failed", "error");
       } else {
         setSchedule(data);
+        toast("Schedule generated!");
       }
     } catch {
       setError("Failed to connect to the optimizer. Please try again.");
+      toast("Connection failed", "error");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [toast]);
 
   const handleAccept = useCallback(async () => {
     if (!schedule) return;
@@ -73,15 +78,18 @@ export default function OptimizePage() {
       const data = await res.json();
       if (data.error) {
         setError(data.error);
+        toast("Failed to accept plan", "error");
       } else {
         setAccepted(true);
+        toast("Plan accepted! Events synced to calendar");
       }
     } catch {
       setError("Failed to save the plan.");
+      toast("Failed to save plan", "error");
     } finally {
       setAccepting(false);
     }
-  }, [schedule]);
+  }, [schedule, toast]);
 
   const handleDismiss = useCallback(() => {
     setSchedule(null);
@@ -148,7 +156,7 @@ export default function OptimizePage() {
 
       {/* Schedule result */}
       {schedule && !loading && (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-fade-in-up">
           {/* Accepted banner */}
           {accepted && (
             <div className="bg-green-400/10 border border-green-400/20 rounded-xl p-4">
@@ -191,7 +199,7 @@ export default function OptimizePage() {
             </h2>
             <div className="space-y-1">
               {schedule.schedule.map((entry, i) => (
-                <ScheduleRow key={i} entry={entry} />
+                <ScheduleRow key={i} entry={entry} index={i} />
               ))}
             </div>
           </div>
@@ -247,14 +255,14 @@ export default function OptimizePage() {
   );
 }
 
-function ScheduleRow({ entry }: { entry: ScheduleEntry }) {
+function ScheduleRow({ entry, index }: { entry: ScheduleEntry; index: number }) {
   const config = TYPE_COLORS[entry.type] ?? TYPE_COLORS.buffer;
   const label = TYPE_LABELS[entry.type] ?? entry.type;
 
   return (
     <div
-      className="flex items-center gap-3 py-2.5 px-3 rounded-lg"
-      style={{ backgroundColor: config.bg }}
+      className="flex items-center gap-3 py-2.5 px-3 rounded-lg animate-schedule-row"
+      style={{ backgroundColor: config.bg, animationDelay: `${index * 50}ms` }}
     >
       {/* Time */}
       <div className="font-mono text-xs text-muted w-28 shrink-0">

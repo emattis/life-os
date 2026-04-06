@@ -32,7 +32,9 @@ export default function RootLayout({
       <body className="min-h-full flex">
         <Providers>
           <Sidebar />
-          <main className="flex-1 ml-64 p-8">{children}</main>
+          <main className="flex-1 pt-16 px-4 pb-8 lg:pt-8 lg:pl-72 lg:pr-8">
+            {children}
+          </main>
         </Providers>
       </body>
     </html>

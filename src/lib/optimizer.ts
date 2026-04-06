@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getDayOfWeek } from "@/lib/utils";
-import { generateSchedule } from "@/lib/claude";
+import { generateText, extractJSON } from "@/lib/gemini";
 import { getCalendarEvents } from "@/lib/google-calendar";
 import type { OptimizedSchedule } from "@/types";
 
@@ -72,11 +72,11 @@ export async function optimizeDay(
     calendarEvents,
   });
 
-  // Call Claude
-  const rawResponse = await generateSchedule(prompt);
+  // Call Gemini
+  const rawResponse = await generateText(prompt);
 
   // Parse JSON from response (handle markdown code blocks)
-  const jsonStr = rawResponse.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+  const jsonStr = extractJSON(rawResponse);
   const parsed: OptimizedSchedule = JSON.parse(jsonStr);
 
   return parsed;

@@ -141,7 +141,7 @@ export function GoalForm({ initial, onSubmit, onCancel }: GoalFormProps) {
             type="date"
             value={form.targetDate}
             onChange={(e) => setForm({ ...form, targetDate: e.target.value })}
-            className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50 [color-scheme:dark]"
+            className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50"
           />
         </div>
       </div>

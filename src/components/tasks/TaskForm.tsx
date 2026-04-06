@@ -175,7 +175,7 @@ export function TaskForm({ initial, onSubmit, onCancel }: TaskFormProps) {
             onChange={(e) =>
               setForm({ ...form, scheduledDate: e.target.value })
             }
-            className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50 [color-scheme:dark]"
+            className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50"
           />
         </div>
       )}
@@ -265,7 +265,7 @@ export function TaskForm({ initial, onSubmit, onCancel }: TaskFormProps) {
             type="date"
             value={form.dueDate}
             onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
-            className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50 [color-scheme:dark]"
+            className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50"
           />
         </div>
         <div>

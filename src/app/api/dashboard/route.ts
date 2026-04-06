@@ -18,7 +18,9 @@ export async function GET(request: NextRequest) {
   const weekEnd = new Date(dayStart);
   weekEnd.setDate(weekEnd.getDate() + 7);
 
-  const [allBlocks, goals, tasks, upcomingEvents] = await Promise.all([
+  const dateKey = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, "0")}-${String(targetDate.getDate()).padStart(2, "0")}`;
+
+  const [allBlocks, goals, tasks, upcomingEvents, acceptedPlan] = await Promise.all([
     prisma.dailyBlock.findMany({ orderBy: { startTime: "asc" } }),
 
     prisma.goal.findMany({
@@ -44,6 +46,12 @@ export async function GET(request: NextRequest) {
         status: { not: "completed" },
       },
       orderBy: { scheduledDate: "asc" },
+    }),
+
+    // Check for an accepted optimized plan for this date
+    prisma.optimizedDay.findFirst({
+      where: { date: dateKey, accepted: true },
+      orderBy: { createdAt: "desc" },
     }),
   ]);
 
@@ -74,11 +82,22 @@ export async function GET(request: NextRequest) {
     (t) => t.dueDate && new Date(t.dueDate) < dayStart
   ).length;
 
+  // Parse accepted plan if it exists
+  let optimizedSchedule = null;
+  if (acceptedPlan) {
+    try {
+      optimizedSchedule = JSON.parse(acceptedPlan.plan);
+    } catch {
+      // Invalid JSON — ignore
+    }
+  }
+
   return NextResponse.json({
     todayBlocks: dayBlocks,
     goals: goalsWithProgress,
     tasks: { goalTasks, todos, events },
     upcomingEvents,
+    optimizedSchedule,
     stats: {
       activeGoals: goals.length,
       pendingTasks: tasks.length,

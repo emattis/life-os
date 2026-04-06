@@ -46,6 +46,13 @@ interface DashboardData {
     estimatedMins: number;
     status: string;
   }[];
+  optimizedSchedule: {
+    start: string;
+    end: string;
+    activity: string;
+    type: string;
+    taskId?: string;
+  }[] | null;
   stats: {
     activeGoals: number;
     pendingTasks: number;
@@ -254,6 +261,7 @@ function DashboardContent() {
           <TimelineView
             blocks={data?.todayBlocks ?? []}
             calendarEvents={calendarEvents}
+            optimizedSchedule={data?.optimizedSchedule}
           />
         </div>
 

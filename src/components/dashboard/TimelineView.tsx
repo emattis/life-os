@@ -21,12 +21,20 @@ interface CalendarEvent {
   allDay: boolean;
 }
 
+interface ScheduleEntry {
+  start: string;
+  end: string;
+  activity: string;
+  type: string;
+  taskId?: string;
+}
+
 interface TimelineViewProps {
   blocks: Block[];
   calendarEvents?: CalendarEvent[];
+  optimizedSchedule?: ScheduleEntry[] | null;
 }
 
-// Generate hour markers from 6am to 11pm
 const HOURS = Array.from({ length: 18 }, (_, i) => i + 6);
 
 function timeToMinutes(time: string): number {
@@ -39,24 +47,44 @@ function isoToMinutes(iso: string): number {
   return d.getHours() * 60 + d.getMinutes();
 }
 
-export function TimelineView({ blocks, calendarEvents = [] }: TimelineViewProps) {
-  const startOfDay = 6 * 60; // 6am
-  const endOfDay = 23 * 60; // 11pm
+const SCHEDULE_TYPE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
+  block: { bg: "#64748b25", border: "#64748b", text: "#94a3b8" },
+  goal_task: { bg: "#8b5cf625", border: "#8b5cf6", text: "#a78bfa" },
+  to_do: { bg: "#3b82f625", border: "#3b82f6", text: "#60a5fa" },
+  event: { bg: "#ec489925", border: "#ec4899", text: "#f472b6" },
+  calendar: { bg: "#06b6d425", border: "#06b6d4", text: "#22d3ee" },
+  buffer: { bg: "#47556915", border: "#475569", text: "#64748b" },
+};
+
+export function TimelineView({
+  blocks,
+  calendarEvents = [],
+  optimizedSchedule,
+}: TimelineViewProps) {
+  const startOfDay = 6 * 60;
+  const endOfDay = 23 * 60;
   const totalMinutes = endOfDay - startOfDay;
 
-  const hasContent = blocks.length > 0 || calendarEvents.length > 0;
-
-  // Filter out all-day events, keep timed ones
   const timedEvents = calendarEvents.filter((e) => !e.allDay);
+  const hasOptimized = optimizedSchedule && optimizedSchedule.length > 0;
+  const hasContent = blocks.length > 0 || timedEvents.length > 0 || hasOptimized;
 
   return (
     <div className="bg-card rounded-xl border border-border p-5">
-      <h2 className="text-sm font-medium text-muted uppercase tracking-wider mb-4">
-        Today&apos;s Schedule
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-medium text-muted uppercase tracking-wider">
+          Schedule
+        </h2>
+        {hasOptimized && (
+          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-accent/15 text-accent">
+            Optimized
+          </span>
+        )}
+      </div>
+
       {!hasContent ? (
         <p className="text-xs text-muted/60 py-4 text-center">
-          No blocks or events scheduled for today
+          No blocks or events scheduled
         </p>
       ) : (
         <div className="relative" style={{ height: `${HOURS.length * 40}px` }}>
@@ -77,84 +105,138 @@ export function TimelineView({ blocks, calendarEvents = [] }: TimelineViewProps)
             );
           })}
 
-          {/* Block bars */}
-          {blocks.map((block) => {
-            const start = timeToMinutes(block.startTime);
-            const end = timeToMinutes(block.endTime);
-            const clampedStart = Math.max(start, startOfDay);
-            const clampedEnd = Math.min(end, endOfDay);
-            if (clampedEnd <= clampedStart) return null;
+          {/* Optimized schedule entries (when accepted plan exists) */}
+          {hasOptimized &&
+            optimizedSchedule!.map((entry, i) => {
+              const start = timeToMinutes(entry.start);
+              const end = timeToMinutes(entry.end);
+              const clampedStart = Math.max(start, startOfDay);
+              const clampedEnd = Math.min(end, endOfDay);
+              if (clampedEnd <= clampedStart) return null;
 
-            const top = ((clampedStart - startOfDay) / totalMinutes) * 100;
-            const height = ((clampedEnd - clampedStart) / totalMinutes) * 100;
+              const top = ((clampedStart - startOfDay) / totalMinutes) * 100;
+              const height = ((clampedEnd - clampedStart) / totalMinutes) * 100;
+              const colors =
+                SCHEDULE_TYPE_COLORS[entry.type] ?? SCHEDULE_TYPE_COLORS.buffer;
 
-            return (
-              <div
-                key={`block-${block.id}`}
-                className="absolute left-14 right-[50%] rounded-lg px-3 py-1.5 overflow-hidden"
-                style={{
-                  top: `${top}%`,
-                  height: `${height}%`,
-                  minHeight: "24px",
-                  backgroundColor: block.color + "25",
-                  borderLeft: `3px solid ${block.color}`,
-                }}
-              >
-                <span
-                  className="text-xs font-medium block truncate"
-                  style={{ color: block.color }}
+              return (
+                <div
+                  key={`opt-${i}`}
+                  className="absolute left-14 right-2 rounded-lg px-3 py-1.5 overflow-hidden"
+                  style={{
+                    top: `${top}%`,
+                    height: `${height}%`,
+                    minHeight: "24px",
+                    backgroundColor: colors.bg,
+                    borderLeft: `3px solid ${colors.border}`,
+                  }}
                 >
-                  {block.name}
-                </span>
-                <span className="text-[10px] font-mono text-muted">
-                  {formatTime(block.startTime)} – {formatTime(block.endTime)}
-                </span>
-              </div>
-            );
-          })}
+                  <span
+                    className="text-xs font-medium block truncate"
+                    style={{ color: colors.text }}
+                  >
+                    {entry.activity}
+                  </span>
+                  <span className="text-[10px] font-mono text-muted">
+                    {formatTime(entry.start)} – {formatTime(entry.end)}
+                  </span>
+                </div>
+              );
+            })}
 
-          {/* Calendar event bars */}
-          {timedEvents.map((event) => {
-            const start = isoToMinutes(event.start);
-            const end = isoToMinutes(event.end);
-            const clampedStart = Math.max(start, startOfDay);
-            const clampedEnd = Math.min(end, endOfDay);
-            if (clampedEnd <= clampedStart) return null;
+          {/* Daily block bars (only when no optimized schedule) */}
+          {!hasOptimized &&
+            blocks.map((block) => {
+              const start = timeToMinutes(block.startTime);
+              const end = timeToMinutes(block.endTime);
+              const clampedStart = Math.max(start, startOfDay);
+              const clampedEnd = Math.min(end, endOfDay);
+              if (clampedEnd <= clampedStart) return null;
 
-            const top = ((clampedStart - startOfDay) / totalMinutes) * 100;
-            const height = ((clampedEnd - clampedStart) / totalMinutes) * 100;
+              const top = ((clampedStart - startOfDay) / totalMinutes) * 100;
+              const height = ((clampedEnd - clampedStart) / totalMinutes) * 100;
 
-            const startTime = new Date(event.start).toLocaleTimeString(
-              "en-US",
-              { hour: "numeric", minute: "2-digit" }
-            );
-            const endTime = new Date(event.end).toLocaleTimeString("en-US", {
-              hour: "numeric",
-              minute: "2-digit",
-            });
+              return (
+                <div
+                  key={`block-${block.id}`}
+                  className="absolute left-14 rounded-lg px-3 py-1.5 overflow-hidden"
+                  style={{
+                    top: `${top}%`,
+                    height: `${height}%`,
+                    minHeight: "24px",
+                    right: timedEvents.length > 0 ? "50%" : "8px",
+                    backgroundColor:
+                      block.color + (block.flexible ? "18" : "30"),
+                    borderLeft: `3px solid ${block.color}`,
+                    borderStyle: block.flexible ? "dashed" : "solid",
+                    borderLeftStyle: block.flexible ? "dashed" : "solid",
+                  }}
+                >
+                  <span
+                    className="text-xs font-medium block truncate"
+                    style={{
+                      color: block.color,
+                      opacity: block.flexible ? 0.7 : 1,
+                    }}
+                  >
+                    {block.name}
+                    {block.flexible && (
+                      <span className="text-[9px] ml-1 opacity-60">flex</span>
+                    )}
+                  </span>
+                  <span
+                    className="text-[10px] font-mono text-muted"
+                    style={{ opacity: block.flexible ? 0.6 : 1 }}
+                  >
+                    {formatTime(block.startTime)} – {formatTime(block.endTime)}
+                  </span>
+                </div>
+              );
+            })}
 
-            return (
-              <div
-                key={`cal-${event.id}`}
-                className="absolute right-0 rounded-lg px-3 py-1.5 overflow-hidden"
-                style={{
-                  top: `${top}%`,
-                  height: `${height}%`,
-                  minHeight: "24px",
-                  left: "52%",
-                  backgroundColor: "#3b82f520",
-                  borderLeft: "3px solid #3b82f5",
-                }}
-              >
-                <span className="text-xs font-medium block truncate text-blue-400">
-                  {event.title}
-                </span>
-                <span className="text-[10px] font-mono text-muted">
-                  {startTime} – {endTime}
-                </span>
-              </div>
-            );
-          })}
+          {/* Calendar event bars (only when no optimized schedule) */}
+          {!hasOptimized &&
+            timedEvents.map((event) => {
+              const start = isoToMinutes(event.start);
+              const end = isoToMinutes(event.end);
+              const clampedStart = Math.max(start, startOfDay);
+              const clampedEnd = Math.min(end, endOfDay);
+              if (clampedEnd <= clampedStart) return null;
+
+              const top = ((clampedStart - startOfDay) / totalMinutes) * 100;
+              const height = ((clampedEnd - clampedStart) / totalMinutes) * 100;
+
+              const startTime = new Date(event.start).toLocaleTimeString(
+                "en-US",
+                { hour: "numeric", minute: "2-digit" }
+              );
+              const endTime = new Date(event.end).toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+              });
+
+              return (
+                <div
+                  key={`cal-${event.id}`}
+                  className="absolute right-2 rounded-lg px-3 py-1.5 overflow-hidden"
+                  style={{
+                    top: `${top}%`,
+                    height: `${height}%`,
+                    minHeight: "24px",
+                    left: blocks.length > 0 ? "52%" : "56px",
+                    backgroundColor: "#3b82f520",
+                    borderLeft: "3px solid #3b82f5",
+                  }}
+                >
+                  <span className="text-xs font-medium block truncate text-blue-400">
+                    {event.title}
+                  </span>
+                  <span className="text-[10px] font-mono text-muted">
+                    {startTime} – {endTime}
+                  </span>
+                </div>
+              );
+            })}
 
           {/* Current time indicator */}
           <CurrentTimeIndicator

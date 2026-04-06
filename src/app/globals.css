@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
-:root {
+/* Dark theme (default) */
+:root,
+.dark {
   --background: #0f172a;
   --foreground: #e2e8f0;
   --card: #1e293b;
@@ -8,6 +10,19 @@
   --border: #334155;
   --muted: #475569;
   --accent: #6366f1;
+  color-scheme: dark;
+}
+
+/* Light theme */
+.light {
+  --background: #f8fafc;
+  --foreground: #1e293b;
+  --card: #ffffff;
+  --card-foreground: #1e293b;
+  --border: #e2e8f0;
+  --muted: #94a3b8;
+  --accent: #6366f1;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -26,6 +41,18 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Light mode overrides for hover utilities that use white opacity */
+.light .hover\:bg-white\/5:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+.light .hover\:bg-white\/10:hover {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+.light .bg-white\/5 {
+  background-color: rgba(0, 0, 0, 0.04);
 }
 
 /* ── Animations ── */
@@ -114,7 +141,7 @@ body {
   animation: fade-in-up 0.2s ease-out both;
 }
 
-/* Scrollbar styling for dark mode */
+/* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;
 }

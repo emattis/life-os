@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: "◉" },
@@ -57,12 +58,15 @@ export function Sidebar() {
             <h1 className="text-xl font-bold text-accent">Life OS</h1>
             <p className="text-sm text-muted mt-1">Daily Optimizer</p>
           </div>
-          <button
-            onClick={() => setMobileOpen(false)}
-            className="lg:hidden p-1 text-muted hover:text-foreground"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <button
+              onClick={() => setMobileOpen(false)}
+              className="lg:hidden p-1 text-muted hover:text-foreground"
+            >
+              ✕
+            </button>
+          </div>
         </div>
         <nav className="flex-1 px-4 space-y-1">
           {navItems.map((item) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { TimelineView } from "@/components/dashboard/TimelineView";
@@ -9,6 +9,7 @@ import { TasksByType } from "@/components/dashboard/TasksByType";
 import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
 import { UpcomingEvents } from "@/components/dashboard/UpcomingEvents";
 import { QuickAddTask } from "@/components/dashboard/QuickAddTask";
+import { CalendarEvents } from "@/components/dashboard/CalendarEvents";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -70,8 +71,26 @@ function getGreeting(): string {
   return "Good evening";
 }
 
+interface CalendarEventItem {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+}
+
 export default function Dashboard() {
   const { data, mutate } = useSWR<DashboardData>("/api/dashboard", fetcher);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>([]);
+  const [, setCalendarSyncedAt] = useState<string>("");
+
+  const handleCalendarLoaded = useCallback(
+    (events: CalendarEventItem[], syncedAt: string) => {
+      setCalendarEvents(events);
+      setCalendarSyncedAt(syncedAt);
+    },
+    []
+  );
 
   const handleStatusChange = useCallback(
     async (id: string, status: string) => {
@@ -156,7 +175,10 @@ export default function Dashboard() {
 
         {/* Timeline */}
         <div className="mb-6">
-          <TimelineView blocks={data?.todayBlocks ?? []} />
+          <TimelineView
+            blocks={data?.todayBlocks ?? []}
+            calendarEvents={calendarEvents}
+          />
         </div>
 
         {/* Tasks by type */}
@@ -171,6 +193,7 @@ export default function Dashboard() {
       {/* Right panel */}
       <div className="w-72 shrink-0 space-y-4 hidden lg:block">
         <MiniCalendar />
+        <CalendarEvents onEventsLoaded={handleCalendarLoaded} />
         <GoalSummary goals={data?.goals ?? []} />
         <UpcomingEvents events={data?.upcomingEvents ?? []} />
       </div>

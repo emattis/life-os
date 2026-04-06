@@ -1,0 +1,61 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Goal {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  category    String   // e.g., "health", "career", "personal", "financial"
+  priority    Int      @default(1) // 1=highest
+  targetDate  DateTime?
+  status      String   @default("active") // active, completed, paused
+  tasks       Task[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Task {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  priority      Int       @default(2) // 1=urgent, 2=high, 3=medium, 4=low
+  status        String    @default("pending") // pending, in_progress, completed, deferred
+  estimatedMins Int       @default(30)
+  dueDate       DateTime?
+  goalId        String?
+  goal          Goal?     @relation(fields: [goalId], references: [id])
+  recurring     String?   // null, "daily", "weekly", "monthly"
+  energyLevel   String    @default("medium") // low, medium, high
+  tags          String?   // comma-separated
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model DailyBlock {
+  id        String   @id @default(cuid())
+  name      String   // e.g., "Sleep", "Workout", "Commute"
+  startTime String   // "07:00" (24hr format)
+  endTime   String   // "08:00"
+  days      String   @default("mon,tue,wed,thu,fri,sat,sun")
+  category  String   // "sleep", "meal", "exercise", "commute", "routine", "work"
+  flexible  Boolean  @default(false)
+  color     String   @default("#6366f1")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OptimizedDay {
+  id        String   @id @default(cuid())
+  date      String   // "2026-04-05"
+  plan      String   // JSON string of the optimized schedule
+  reasoning String?
+  accepted  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}

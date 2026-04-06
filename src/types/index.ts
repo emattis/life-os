@@ -30,7 +30,7 @@ export interface ScheduleEntry {
   start: string;
   end: string;
   activity: string;
-  type: "block" | "task" | "event" | "buffer";
+  type: "block" | "goal_task" | "to_do" | "event" | "calendar" | "buffer";
   taskId?: string;
 }
 

@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import useSWR from "swr";
 import { useSession } from "next-auth/react";
+import { localDayBounds, isSameDay } from "@/lib/utils";
 
 interface CalendarEvent {
   id: string;
@@ -31,29 +32,29 @@ function formatEventTime(isoStr: string): string {
 }
 
 interface CalendarEventsProps {
+  selectedDate: Date;
   onEventsLoaded?: (events: CalendarEvent[], syncedAt: string) => void;
 }
 
-export function CalendarEvents({ onEventsLoaded }: CalendarEventsProps) {
+export function CalendarEvents({
+  selectedDate,
+  onEventsLoaded,
+}: CalendarEventsProps) {
   const { data: session, status } = useSession();
   const [manualRefresh, setManualRefresh] = useState(0);
 
-  // Safe to call new Date() here because this component only renders
-  // inside DashboardContent which is client-only (mounted guard in parent)
-  const { timeMin, timeMax } = useMemo(() => {
-    const today = new Date();
-    const min = today.toISOString().split("T")[0] + "T00:00:00Z";
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const max = tomorrow.toISOString().split("T")[0] + "T00:00:00Z";
-    return { timeMin: min, timeMax: max };
-  }, []);
+  // Use local timezone bounds for the selected date
+  const { timeMin, timeMax } = useMemo(
+    () => localDayBounds(selectedDate),
+    [selectedDate]
+  );
 
   const hasToken = !!session?.accessToken;
+  const isToday = isSameDay(selectedDate, new Date());
 
   const { data, mutate } = useSWR<CalendarResponse>(
     hasToken
-      ? `/api/calendar?timeMin=${timeMin}&timeMax=${timeMax}&_r=${manualRefresh}`
+      ? `/api/calendar?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&_r=${manualRefresh}`
       : null,
     fetcher,
     {
@@ -71,7 +72,6 @@ export function CalendarEvents({ onEventsLoaded }: CalendarEventsProps) {
     mutate();
   }, [mutate]);
 
-  // Still loading session
   if (status === "loading") {
     return (
       <div className="bg-card rounded-xl border border-border p-4">
@@ -102,11 +102,18 @@ export function CalendarEvents({ onEventsLoaded }: CalendarEventsProps) {
   const syncedAt = data?.syncedAt;
   const hasError = data?.error;
 
+  const dateLabel = isToday
+    ? "today"
+    : selectedDate.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      });
+
   return (
     <div className="bg-card rounded-xl border border-border p-4">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-medium text-muted uppercase tracking-wider">
-          Google Calendar
+          Calendar
         </h2>
         <button
           onClick={handleSync}
@@ -123,7 +130,7 @@ export function CalendarEvents({ onEventsLoaded }: CalendarEventsProps) {
         </p>
       ) : events.length === 0 ? (
         <p className="text-xs text-muted/60 text-center py-2">
-          No events today
+          No events {dateLabel}
         </p>
       ) : (
         <div className="space-y-2">
@@ -150,7 +157,6 @@ export function CalendarEvents({ onEventsLoaded }: CalendarEventsProps) {
         </div>
       )}
 
-      {/* Sync indicator */}
       {syncedAt && (
         <div className="mt-3 pt-2 border-t border-border">
           <p className="text-[10px] text-muted/50">

@@ -1,21 +1,26 @@
 import { prisma } from "@/lib/prisma";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getDayOfWeek } from "@/lib/utils";
 
-export async function GET() {
-  const now = new Date();
-  const todayShort = getDayOfWeek(now);
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayEnd = new Date(todayStart);
-  todayEnd.setDate(todayEnd.getDate() + 1);
-  const weekEnd = new Date(todayStart);
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const dateParam = searchParams.get("date"); // "YYYY-MM-DD" or null (defaults to today)
+
+  const targetDate = dateParam ? new Date(dateParam + "T12:00:00") : new Date();
+  const dayShort = getDayOfWeek(targetDate);
+  const dayStart = new Date(
+    targetDate.getFullYear(),
+    targetDate.getMonth(),
+    targetDate.getDate()
+  );
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+  const weekEnd = new Date(dayStart);
   weekEnd.setDate(weekEnd.getDate() + 7);
 
   const [allBlocks, goals, tasks, upcomingEvents] = await Promise.all([
-    // Today's blocks (filtered client-side by day)
     prisma.dailyBlock.findMany({ orderBy: { startTime: "asc" } }),
 
-    // Active goals with task counts
     prisma.goal.findMany({
       where: { status: "active" },
       include: {
@@ -24,7 +29,6 @@ export async function GET() {
       orderBy: { priority: "asc" },
     }),
 
-    // Non-completed tasks
     prisma.task.findMany({
       where: { status: { not: "completed" } },
       include: {
@@ -33,23 +37,21 @@ export async function GET() {
       orderBy: [{ priority: "asc" }, { dueDate: "asc" }],
     }),
 
-    // Upcoming events this week
     prisma.task.findMany({
       where: {
         type: "event",
-        scheduledDate: { gte: todayStart, lt: weekEnd },
+        scheduledDate: { gte: dayStart, lt: weekEnd },
         status: { not: "completed" },
       },
       orderBy: { scheduledDate: "asc" },
     }),
   ]);
 
-  // Filter blocks for today's day-of-week
-  const todayBlocks = allBlocks.filter((b) =>
-    b.days.split(",").includes(todayShort)
+  // Filter blocks for the target day-of-week
+  const dayBlocks = allBlocks.filter((b) =>
+    b.days.split(",").includes(dayShort)
   );
 
-  // Goals with progress
   const goalsWithProgress = goals.map((g) => {
     const total = g.tasks.length;
     const completed = g.tasks.filter((t) => t.status === "completed").length;
@@ -64,25 +66,23 @@ export async function GET() {
     };
   });
 
-  // Split tasks by type
   const goalTasks = tasks.filter((t) => t.type === "goal_task");
   const todos = tasks.filter((t) => t.type === "to_do");
   const events = tasks.filter((t) => t.type === "event");
 
-  // Overdue count
   const overdue = tasks.filter(
-    (t) => t.dueDate && new Date(t.dueDate) < todayStart
+    (t) => t.dueDate && new Date(t.dueDate) < dayStart
   ).length;
 
   return NextResponse.json({
-    todayBlocks,
+    todayBlocks: dayBlocks,
     goals: goalsWithProgress,
     tasks: { goalTasks, todos, events },
     upcomingEvents,
     stats: {
       activeGoals: goals.length,
       pendingTasks: tasks.length,
-      todayBlocks: todayBlocks.length,
+      todayBlocks: dayBlocks.length,
       overdue,
     },
   });

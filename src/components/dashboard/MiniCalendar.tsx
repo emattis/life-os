@@ -1,14 +1,30 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { isSameDay } from "@/lib/utils";
 
-export function MiniCalendar() {
+interface MiniCalendarProps {
+  selectedDate: Date;
+  onDateSelect: (date: Date) => void;
+}
+
+export function MiniCalendar({ selectedDate, onDateSelect }: MiniCalendarProps) {
   const [mounted, setMounted] = useState(false);
-  const [viewDate, setViewDate] = useState(() => new Date());
+  const [viewDate, setViewDate] = useState(() => new Date(selectedDate));
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // When selectedDate changes externally, update the view month if needed
+  useEffect(() => {
+    if (
+      selectedDate.getFullYear() !== viewDate.getFullYear() ||
+      selectedDate.getMonth() !== viewDate.getMonth()
+    ) {
+      setViewDate(new Date(selectedDate));
+    }
+  }, [selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const today = mounted ? new Date() : null;
   const year = viewDate.getFullYear();
@@ -33,8 +49,9 @@ export function MiniCalendar() {
     setViewDate(new Date(year, month + 1, 1));
   }
 
-  const isCurrentMonth =
-    today && today.getFullYear() === year && today.getMonth() === month;
+  function handleDayClick(day: number) {
+    onDateSelect(new Date(year, month, day));
+  }
 
   if (!mounted) {
     return (
@@ -79,21 +96,37 @@ export function MiniCalendar() {
           <div key={`empty-${i}`} className="h-7" />
         ))}
         {days.map((day) => {
-          const isToday = isCurrentMonth && today && day === today.getDate();
+          const thisDate = new Date(year, month, day);
+          const isToday = today && isSameDay(thisDate, today);
+          const isSelected = isSameDay(thisDate, selectedDate);
+
           return (
-            <div
+            <button
               key={day}
-              className={`h-7 flex items-center justify-center text-xs rounded-md ${
-                isToday
+              onClick={() => handleDayClick(day)}
+              className={`h-7 w-full flex items-center justify-center text-xs rounded-md transition-colors ${
+                isSelected
                   ? "bg-accent text-white font-bold"
-                  : "text-foreground/80 hover:bg-white/5"
+                  : isToday
+                    ? "bg-accent/20 text-accent font-bold"
+                    : "text-foreground/80 hover:bg-white/10"
               }`}
             >
               {day}
-            </div>
+            </button>
           );
         })}
       </div>
+
+      {/* Today button */}
+      {today && !isSameDay(selectedDate, today) && (
+        <button
+          onClick={() => onDateSelect(new Date())}
+          className="mt-2 w-full text-center text-[10px] text-accent hover:underline"
+        >
+          Back to today
+        </button>
+      )}
     </div>
   );
 }

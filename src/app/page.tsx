@@ -11,6 +11,7 @@ import { UpcomingEvents } from "@/components/dashboard/UpcomingEvents";
 import { CalendarEvents } from "@/components/dashboard/CalendarEvents";
 import { CommandBar } from "@/components/dashboard/CommandBar";
 import { useToast } from "@/components/layout/Toast";
+import { toLocalDateString, isSameDay } from "@/lib/utils";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -80,15 +81,6 @@ function getGreeting(): string {
   return "Good evening";
 }
 
-function getToday(): string {
-  return new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
-
 export default function Dashboard() {
   const [mounted, setMounted] = useState(false);
 
@@ -96,7 +88,6 @@ export default function Dashboard() {
     setMounted(true);
   }, []);
 
-  // Render a static shell on the server that matches the first client render
   if (!mounted) {
     return <DashboardSkeleton />;
   }
@@ -137,9 +128,17 @@ function DashboardSkeleton() {
 }
 
 function DashboardContent() {
-  const { data, mutate } = useSWR<DashboardData>("/api/dashboard", fetcher);
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>([]);
   const { toast } = useToast();
+
+  const dateStr = toLocalDateString(selectedDate);
+  const isToday = isSameDay(selectedDate, new Date());
+
+  const { data, mutate } = useSWR<DashboardData>(
+    `/api/dashboard?date=${dateStr}`,
+    fetcher
+  );
 
   const handleCalendarLoaded = useCallback(
     (events: CalendarEventItem[], _syncedAt: string) => {
@@ -147,6 +146,11 @@ function DashboardContent() {
     },
     []
   );
+
+  const handleDateSelect = useCallback((date: Date) => {
+    setSelectedDate(date);
+    setCalendarEvents([]); // clear stale events while new ones load
+  }, []);
 
   const handleStatusChange = useCallback(
     async (id: string, status: string) => {
@@ -170,7 +174,20 @@ function DashboardContent() {
   }, [mutate]);
 
   const greeting = getGreeting();
-  const today = getToday();
+  const dateLabel = isToday
+    ? new Date().toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : selectedDate.toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+
   const stats = data?.stats;
   const isLoading = !data;
 
@@ -181,8 +198,10 @@ function DashboardContent() {
         {/* Header */}
         <div className="flex items-start justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold">{greeting}</h1>
-            <p className="text-muted mt-1 font-mono text-sm">{today}</p>
+            <h1 className="text-3xl font-bold">
+              {isToday ? greeting : "Schedule"}
+            </h1>
+            <p className="text-muted mt-1 font-mono text-sm">{dateLabel}</p>
           </div>
           <Link
             href="/optimize"
@@ -209,7 +228,7 @@ function DashboardContent() {
             className="animate-card-2"
           />
           <StatCard
-            label="Today's Blocks"
+            label={isToday ? "Today's Blocks" : "Day's Blocks"}
             value={stats?.todayBlocks ?? 0}
             color="text-cyan-400"
             loading={isLoading}
@@ -249,8 +268,14 @@ function DashboardContent() {
 
       {/* Right panel */}
       <div className="w-full lg:w-72 shrink-0 space-y-4">
-        <MiniCalendar />
-        <CalendarEvents onEventsLoaded={handleCalendarLoaded} />
+        <MiniCalendar
+          selectedDate={selectedDate}
+          onDateSelect={handleDateSelect}
+        />
+        <CalendarEvents
+          selectedDate={selectedDate}
+          onEventsLoaded={handleCalendarLoaded}
+        />
         <GoalSummary goals={data?.goals ?? []} />
         <UpcomingEvents events={data?.upcomingEvents ?? []} />
       </div>

@@ -16,6 +16,8 @@ export type EnergyLevel = "low" | "medium" | "high";
 
 export type RecurringType = "daily" | "weekly" | "monthly";
 
+export type TaskType = "goal_task" | "to_do" | "event";
+
 export type BlockCategory =
   | "sleep"
   | "meal"

@@ -34,7 +34,8 @@ life-os/
 │   │       ├── goals/route.ts
 │   │       ├── blocks/route.ts
 │   │       ├── calendar/route.ts
-│   │       └── optimize/route.ts
+│   │       ├── optimize/route.ts
+│   │       └── command/route.ts      # AI command bar — parses natural language into items
 │   ├── components/
 │   │   ├── layout/            # Sidebar, header, nav
 │   │   ├── dashboard/         # Dashboard widgets
@@ -76,10 +77,12 @@ model Task {
   id            String   @id @default(cuid())
   title         String
   description   String?
+  type          String   @default("to_do") // "goal_task" | "to_do" | "event"
   priority      Int      @default(2) // 1=urgent, 2=high, 3=medium, 4=low
   status        String   @default("pending") // pending, in_progress, completed, deferred
   estimatedMins Int      @default(30) // estimated duration
   dueDate       DateTime?
+  scheduledDate DateTime? // specific date/time for events
   goalId        String?
   goal          Goal?    @relation(fields: [goalId], references: [id])
   recurring     String?  // null, "daily", "weekly", "monthly"
@@ -89,6 +92,14 @@ model Task {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
+
+// Task Type Behaviors:
+// - "goal_task": Linked to a goal, gets highest scheduling priority based on goal rank.
+//   The optimizer actively pushes these into your day.
+// - "to_do": Standalone action (errands, articles, calls). No goal link required.
+//   Optimizer fits these into available slots after goal tasks.
+// - "event": Time-specific activity (party, concert, TV show). Has a scheduledDate.
+//   Optimizer treats these like fixed blocks — plans around them, not over them.
 
 model DailyBlock {
   id        String @id @default(cuid())
@@ -123,6 +134,84 @@ model OptimizedDay {
 - Goal progress summary
 - Quick-add task button
 - "Optimize My Day" prominent CTA button
+- **AI Command Bar** (see below)
+
+### 1b. AI Command Bar (Dashboard Chat Interface)
+A small, persistent chat-like input on the dashboard where the user can type natural language and the AI creates structured items automatically.
+
+**How it works:**
+1. User types something like: "I need to prep for my investor meeting Friday, it's critical"
+2. The message is sent to Claude API along with the user's existing goals, task types, and context
+3. Claude parses the intent and returns structured JSON for one or more items to create
+4. The app shows a confirmation card with the parsed details before saving
+5. User can accept, edit, or dismiss
+
+**Example interactions:**
+- "Prep investor deck by Thursday" → creates a goal_task, links to "Career" goal, priority 1, est. 120 min, high energy, due Thursday
+- "Jake's birthday party Saturday 7-10pm" → creates an event, scheduledDate Saturday 7pm, est. 180 min, low energy
+- "I want to start reading more" → creates a goal under "Personal Growth", then suggests a to_do like "Read for 30 minutes" as a recurring daily task
+- "Dentist appointment tomorrow at 2pm" → creates an event, scheduledDate tomorrow 2pm, est. 60 min
+- "I should probably start working out 3x a week" → creates a goal under "Health", suggests recurring goal_tasks for Mon/Wed/Fri
+
+**Claude API prompt for the command bar:**
+```
+You are an assistant that converts natural language into structured tasks, goals, and events.
+
+**User's existing goals:**
+{list of current goals with IDs and categories}
+
+**Available goal categories:** Health, Career, Personal Growth, Financial, Relationships, Creative
+
+**Today's date:** {date}
+
+The user said: "{user input}"
+
+Determine what the user wants to create. Return JSON:
+{
+  "items": [
+    {
+      "action": "create_task" | "create_goal" | "create_both",
+      "goal": {  // only if creating a goal
+        "title": "...",
+        "category": "...",
+        "priority": 1-5,
+        "targetDate": "ISO date or null"
+      },
+      "task": {  // only if creating a task
+        "title": "...",
+        "type": "goal_task" | "to_do" | "event",
+        "priority": 1-4,
+        "estimatedMins": number,
+        "energyLevel": "low" | "medium" | "high",
+        "dueDate": "ISO date or null",
+        "scheduledDate": "ISO datetime or null",
+        "goalId": "existing goal ID or null",
+        "recurring": "daily" | "weekly" | "monthly" | null,
+        "tags": "comma-separated or null"
+      },
+      "explanation": "Brief reason for the choices made"
+    }
+  ],
+  "followUp": "Optional question if the input is ambiguous"
+}
+
+Rules:
+- Infer priority from urgency cues ("critical", "important", "whenever", "low priority")
+- Infer energy level from task type (deep work = high, errands = low, meetings = medium)
+- Estimate duration based on common sense (workout = 60min, email = 15min, presentation prep = 120min)
+- Link to existing goals when the task clearly relates to one
+- If the user describes a habit or ongoing commitment, suggest a goal + recurring task
+- If ambiguous, include a followUp question rather than guessing wrong
+```
+
+**UI details:**
+- Appears as a compact chat bar at the bottom or side of the dashboard
+- Shows a text input with placeholder: "Tell me what you need to get done..."
+- After AI responds, show a preview card with all parsed fields
+- Card has "Create", "Edit", and "Dismiss" buttons
+- Successful creation shows a brief toast confirmation
+- Supports multi-item creation (e.g., "Set up workout routine" → goal + 3 recurring tasks)
+- Chat history persists during the session so user can see what they've added
 
 ### 2. Goals Management
 - Create/edit/archive goals with categories
@@ -133,11 +222,15 @@ model OptimizedDay {
 
 ### 3. Task Management
 - Full CRUD for tasks
-- Fields: title, description, priority (1-4), estimated duration, due date, energy level, tags
-- Link tasks to goals (optional)
+- **Task type selector** at creation: Goal Task, To-Do, or Event
+  - **Goal Task**: Shows goal picker (required), optimizer gives these highest priority
+  - **To-Do**: Standalone action, no goal link needed (errands, articles, calls)
+  - **Event**: Time-specific activity (party, concert, TV night), shows date/time picker for scheduledDate, optimizer treats as a fixed block
+- Fields: title, description, type, priority (1-4), estimated duration, due date, energy level, tags
+- Link goal tasks to goals (required for goal_task type)
 - Recurring task support (daily/weekly/monthly)
 - Status workflow: pending → in_progress → completed
-- Filters: by status, priority, goal, due date, energy level
+- Filters: by type, status, priority, goal, due date, energy level
 - Bulk actions (complete, defer, delete)
 
 ### 4. Daily Blocks (Customizable Routines)
@@ -156,11 +249,13 @@ model OptimizedDay {
 
 ### 6. AI Day Optimizer (Core Feature)
 When user clicks "Optimize My Day":
-1. Gather: today's date, day of week, all pending tasks (with priorities, durations, energy levels), linked goals, fixed daily blocks, Google Calendar events
+1. Gather: today's date, day of week, all pending tasks grouped by type (goal_task, to_do, event), linked goals, fixed daily blocks, Google Calendar events
 2. Send to Claude API with a structured prompt
 3. Claude returns an optimized schedule that:
-   - Respects fixed blocks and existing calendar events
-   - Schedules high-priority / goal-aligned tasks first
+   - Respects fixed blocks, existing calendar events, AND scheduled events (type: "event")
+   - Schedules goal_tasks first, weighted by their parent goal's priority
+   - Fits to_dos into remaining available slots
+   - Treats events as immovable time blocks (like a party at 7pm)
    - Matches task energy levels to optimal times (hard tasks in AM, low-energy tasks in PM)
    - Includes buffer time between activities
    - Accounts for meals, breaks, and transition time
@@ -175,8 +270,14 @@ You are a personal productivity optimizer. Given the following information about
 **User's Goals (by priority):**
 {goals list}
 
-**Pending Tasks:**
-{tasks with priority, duration, energy level, due dates, goal associations}
+**Goal Tasks (linked to goals — schedule these with highest priority):**
+{goal_tasks with priority, duration, energy level, due dates, parent goal}
+
+**To-Dos (standalone tasks — fit into available time):**
+{to_dos with priority, duration, energy level, due dates}
+
+**Events (fixed-time activities — plan around these):**
+{events with scheduled date/time, duration}
 
 **Fixed Daily Blocks (cannot be moved):**
 {blocks marked as fixed}
@@ -190,19 +291,21 @@ You are a personal productivity optimizer. Given the following information about
 **Today:** {date, day of week}
 
 Create a minute-by-minute schedule for the day. Rules:
-1. Never overlap with fixed blocks or existing calendar events
-2. Prioritize tasks linked to highest-priority goals
-3. Schedule high-energy tasks during morning hours (9am-12pm)
-4. Schedule medium-energy tasks early afternoon (1pm-3pm)
-5. Schedule low-energy tasks late afternoon (3pm-5pm)
-6. Include 10-min buffers between task blocks
-7. Don't schedule more than 90 minutes of deep work without a break
-8. Leave at least 1 hour of unscheduled "flex time" for unexpected things
+1. Never overlap with fixed blocks, existing calendar events, or scheduled events
+2. Schedule goal_tasks first, prioritized by their parent goal's rank
+3. Fit to_dos into remaining open slots, ordered by priority then due date
+4. Events are immovable — treat them like fixed blocks
+5. Schedule high-energy tasks during morning hours (9am-12pm)
+6. Schedule medium-energy tasks early afternoon (1pm-3pm)
+7. Schedule low-energy tasks late afternoon (3pm-5pm)
+8. Include 10-min buffers between task blocks
+9. Don't schedule more than 90 minutes of deep work without a break
+10. Leave at least 1 hour of unscheduled "flex time" for unexpected things
 
 Respond in JSON format:
 {
   "schedule": [
-    { "start": "07:00", "end": "08:00", "activity": "...", "type": "block|task|event|buffer", "taskId": "..." }
+    { "start": "07:00", "end": "08:00", "activity": "...", "type": "block|goal_task|to_do|event|calendar|buffer", "taskId": "..." }
   ],
   "reasoning": "...",
   "tasksDeferred": ["task IDs that couldn't fit today"],
@@ -269,12 +372,13 @@ Build in this sequence:
 1. **Project scaffold**: Next.js + Prisma + Tailwind setup, database schema
 2. **Daily blocks**: CRUD for customizable routine blocks (no auth needed yet)
 3. **Goals**: CRUD for goals management
-4. **Tasks**: Full task management with goal linking
+4. **Tasks**: Full task management with goal linking and three task types
 5. **Dashboard**: Main view pulling everything together
 6. **Google Auth**: NextAuth.js with Google OAuth
 7. **Calendar integration**: Read/write Google Calendar events
 8. **AI Optimizer**: Claude API integration for day optimization
-9. **Polish**: Animations, responsive design, edge cases
+9. **AI Command Bar**: Natural language input on dashboard that creates tasks/goals/events
+10. **Polish**: Animations, responsive design, edge cases
 
 ## Development Commands
 

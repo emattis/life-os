@@ -24,10 +24,12 @@ model Task {
   id            String    @id @default(cuid())
   title         String
   description   String?
+  type          String    @default("to_do") // "goal_task", "to_do", "event"
   priority      Int       @default(2) // 1=urgent, 2=high, 3=medium, 4=low
   status        String    @default("pending") // pending, in_progress, completed, deferred
   estimatedMins Int       @default(30)
   dueDate       DateTime?
+  scheduledDate DateTime? // specific date/time for events
   goalId        String?
   goal          Goal?     @relation(fields: [goalId], references: [id])
   recurring     String?   // null, "daily", "weekly", "monthly"

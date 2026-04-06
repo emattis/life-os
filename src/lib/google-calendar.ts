@@ -27,6 +27,7 @@ export async function getCalendarEvents(
     calendarId: "primary",
     timeMin,
     timeMax,
+    timeZone: "America/New_York",
     singleEvents: true,
     orderBy: "startTime",
     maxResults: 50,
@@ -55,20 +56,22 @@ export async function createCalendarEvent(
   accessToken: string,
   event: {
     title: string;
-    start: string; // ISO datetime
-    end: string; // ISO datetime
+    start: string; // ISO datetime or "YYYY-MM-DDTHH:mm:ss"
+    end: string;
     description?: string;
+    timeZone?: string;
   }
 ) {
   const calendar = getCalendarClient(accessToken);
+  const tz = event.timeZone ?? "America/New_York";
 
   const response = await calendar.events.insert({
     calendarId: "primary",
     requestBody: {
       summary: event.title,
       description: event.description,
-      start: { dateTime: event.start },
-      end: { dateTime: event.end },
+      start: { dateTime: event.start, timeZone: tz },
+      end: { dateTime: event.end, timeZone: tz },
     },
   });
 

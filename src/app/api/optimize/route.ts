@@ -45,7 +45,7 @@ async function handleAccept(
     // Push task entries to Google Calendar if authenticated
     if (accessToken) {
       const schedule = JSON.parse(body.plan);
-      const today = new Date(body.date);
+      const dateStr = body.date; // "YYYY-MM-DD"
 
       const writeableTypes = ["goal_task", "to_do"];
       const calendarEntries = schedule.filter(
@@ -53,20 +53,17 @@ async function handleAccept(
       );
 
       for (const entry of calendarEntries) {
-        const [startH, startM] = entry.start.split(":").map(Number);
-        const [endH, endM] = entry.end.split(":").map(Number);
-
-        const start = new Date(today);
-        start.setHours(startH, startM, 0, 0);
-        const end = new Date(today);
-        end.setHours(endH, endM, 0, 0);
+        // Build local datetime strings: "2026-04-06T09:00:00"
+        const startDT = `${dateStr}T${entry.start}:00`;
+        const endDT = `${dateStr}T${entry.end}:00`;
 
         try {
           await createCalendarEvent(accessToken, {
             title: `[Life OS] ${entry.activity}`,
-            start: start.toISOString(),
-            end: end.toISOString(),
+            start: startDT,
+            end: endDT,
             description: "Scheduled by Life OS AI Optimizer",
+            timeZone: "America/New_York",
           });
         } catch {
           // Skip individual calendar write failures

@@ -18,6 +18,7 @@ export async function POST(request: NextRequest) {
   try {
     const schedule = await optimizeDay({
       accessToken: session?.accessToken,
+      date: body.date, // "YYYY-MM-DD" or undefined (defaults to today)
     });
     return NextResponse.json(schedule);
   } catch (error: unknown) {
@@ -47,7 +48,7 @@ async function handleAccept(
       const schedule = JSON.parse(body.plan);
       const dateStr = body.date; // "YYYY-MM-DD"
 
-      const writeableTypes = ["goal_task", "to_do"];
+      const writeableTypes = ["goal_task", "to_do", "suggested"];
       const calendarEntries = schedule.filter(
         (entry: { type: string }) => writeableTypes.includes(entry.type)
       );

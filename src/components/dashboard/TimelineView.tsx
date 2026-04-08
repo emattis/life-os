@@ -94,6 +94,13 @@ const SCHEDULE_TYPE_STYLES: Record<
     text: "#64748b",
     textLight: "#94a3b8",
   },
+  suggested: {
+    bg: "rgba(34,197,94,0.12)",
+    bgLight: "rgba(34,197,94,0.08)",
+    border: "#22c55e",
+    text: "#4ade80",
+    textLight: "#16a34a",
+  },
 };
 
 export function TimelineView({
@@ -280,6 +287,7 @@ function OptimizedTimeline({ entries }: { entries: ScheduleEntry[] }) {
     <div className="space-y-0.5">
       {entries.map((entry, i) => {
         const isBuffer = entry.type === "buffer";
+        const isSuggested = entry.type === "suggested";
         const style = SCHEDULE_TYPE_STYLES[entry.type] ?? SCHEDULE_TYPE_STYLES.buffer;
 
         if (isBuffer) {
@@ -324,10 +332,17 @@ function OptimizedTimeline({ entries }: { entries: ScheduleEntry[] }) {
             {/* Content */}
             <div
               className="flex-1 py-2.5 px-3 rounded-r-lg"
-              style={{ backgroundColor: style.bg }}
+              style={{
+                backgroundColor: style.bg,
+                borderLeft: isSuggested ? "2px dashed #22c55e" : undefined,
+              }}
             >
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-foreground truncate flex-1">
+                <span
+                  className={`text-sm font-medium truncate flex-1 ${
+                    isSuggested ? "text-foreground/70 italic" : "text-foreground"
+                  }`}
+                >
                   {entry.activity}
                 </span>
                 <span
@@ -345,7 +360,9 @@ function OptimizedTimeline({ entries }: { entries: ScheduleEntry[] }) {
                         ? "Cal"
                         : entry.type === "event"
                           ? "Event"
-                          : "Block"}
+                          : entry.type === "suggested"
+                            ? "Suggested"
+                            : "Block"}
                 </span>
               </div>
               <span className="text-[10px] text-muted">

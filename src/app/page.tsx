@@ -211,10 +211,10 @@ function DashboardContent() {
             <p className="text-muted mt-1 font-mono text-sm">{dateLabel}</p>
           </div>
           <Link
-            href="/optimize"
+            href={`/optimize?date=${dateStr}`}
             className="bg-accent hover:bg-accent/90 text-white px-5 py-2.5 rounded-lg font-medium transition-colors flex items-center gap-2 shrink-0"
           >
-            <span>✦</span> Optimize My Day
+            <span>✦</span> Optimize {isToday ? "My Day" : "This Day"}
           </Link>
         </div>
 

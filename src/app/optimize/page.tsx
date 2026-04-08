@@ -258,6 +258,22 @@ export default function OptimizePage() {
 function ScheduleRow({ entry, index }: { entry: ScheduleEntry; index: number }) {
   const config = TYPE_COLORS[entry.type] ?? TYPE_COLORS.buffer;
   const label = TYPE_LABELS[entry.type] ?? entry.type;
+  const isBuffer = entry.type === "buffer";
+
+  if (isBuffer) {
+    return (
+      <div
+        className="flex items-center gap-3 py-1 px-3 animate-schedule-row"
+        style={{ animationDelay: `${index * 50}ms` }}
+      >
+        <span className="font-mono text-[10px] text-muted/50 w-28 shrink-0">
+          {formatTime(entry.start)}
+        </span>
+        <div className="flex-1 border-t border-dashed border-border" />
+        <span className="text-[10px] text-muted/40 shrink-0">buffer</span>
+      </div>
+    );
+  }
 
   return (
     <div

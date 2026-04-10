@@ -1,16 +1,17 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useMemo } from "react";
 import { formatTime } from "@/lib/utils";
 import type { ScheduleEntry } from "@/types";
 
 const SNAP_MINUTES = 15;
-const START_OF_DAY = 6 * 60; // 6am
-const END_OF_DAY = 23 * 60; // 11pm
+const START_OF_DAY = 6 * 60;
+const END_OF_DAY = 23 * 60;
 const TOTAL_MINUTES = END_OF_DAY - START_OF_DAY;
 const HOURS = Array.from({ length: 18 }, (_, i) => i + 6);
-const PX_PER_HOUR = 60; // pixels per hour
+const PX_PER_HOUR = 60;
 const TIMELINE_HEIGHT = HOURS.length * PX_PER_HOUR;
+const LEFT_GUTTER = 56; // px for time labels
 
 const TYPE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   block: { bg: "#64748b28", border: "#64748b", text: "#94a3b8" },
@@ -43,11 +44,65 @@ function minutesToPx(mins: number): number {
   return ((mins - START_OF_DAY) / TOTAL_MINUTES) * TIMELINE_HEIGHT;
 }
 
-function pxToMinutes(px: number): number {
-  return (px / TIMELINE_HEIGHT) * TOTAL_MINUTES + START_OF_DAY;
+/** Compute column layout for overlapping entries */
+function computeColumns(
+  entries: ScheduleEntry[]
+): { col: number; totalCols: number }[] {
+  const layout = entries.map(() => ({ col: 0, totalCols: 1 }));
+  const visibleIndices = entries
+    .map((e, i) => (e.type === "buffer" ? -1 : i))
+    .filter((i) => i >= 0);
+
+  // Sort by start time for overlap grouping
+  const sorted = [...visibleIndices].sort((a, b) => {
+    const aStart = timeToMinutes(entries[a].start);
+    const bStart = timeToMinutes(entries[b].start);
+    return aStart - bStart || a - b;
+  });
+
+  // Assign columns using a greedy interval coloring algorithm
+  const endTimes: number[] = []; // end time per column
+
+  for (const idx of sorted) {
+    const start = timeToMinutes(entries[idx].start);
+    // Find the first column where this entry doesn't overlap
+    let col = -1;
+    for (let c = 0; c < endTimes.length; c++) {
+      if (endTimes[c] <= start) {
+        col = c;
+        break;
+      }
+    }
+    if (col === -1) {
+      col = endTimes.length;
+      endTimes.push(0);
+    }
+    endTimes[col] = timeToMinutes(entries[idx].end);
+    layout[idx].col = col;
+  }
+
+  const maxCols = endTimes.length || 1;
+
+  // For each entry, compute the actual column count among its overlapping group
+  for (const idx of visibleIndices) {
+    const start = timeToMinutes(entries[idx].start);
+    const end = timeToMinutes(entries[idx].end);
+    let groupCols = 1;
+    for (const other of visibleIndices) {
+      if (other === idx) continue;
+      const oStart = timeToMinutes(entries[other].start);
+      const oEnd = timeToMinutes(entries[other].end);
+      if (oStart < end && start < oEnd) {
+        groupCols = Math.max(groupCols, layout[other].col + 1, layout[idx].col + 1);
+      }
+    }
+    layout[idx].totalCols = Math.max(groupCols, layout[idx].col + 1);
+  }
+
+  return layout;
 }
 
-function checkOverlaps(entries: ScheduleEntry[], skipIndex: number): Set<number> {
+function checkOverlaps(entries: ScheduleEntry[]): Set<number> {
   const overlaps = new Set<number>();
   for (let i = 0; i < entries.length; i++) {
     if (entries[i].type === "buffer") continue;
@@ -81,23 +136,22 @@ export function InteractiveTimeline({ entries, onChange }: InteractiveTimelinePr
     origEnd: number;
   } | null>(null);
 
-  const overlaps = checkOverlaps(entries, -1);
+  const overlaps = useMemo(() => checkOverlaps(entries), [entries]);
+  const columns = useMemo(() => computeColumns(entries), [entries]);
 
-  // Compute summary stats
   const nonBufferEntries = entries.filter((e) => e.type !== "buffer");
   const taskEntries = entries.filter((e) =>
     ["goal_task", "to_do", "suggested"].includes(e.type)
   );
-  const totalScheduledMins = nonBufferEntries.reduce((sum, e) => {
-    return sum + (timeToMinutes(e.end) - timeToMinutes(e.start));
-  }, 0);
-  const totalDayMins = TOTAL_MINUTES;
-  const freeMins = Math.max(0, totalDayMins - totalScheduledMins);
+  const totalScheduledMins = nonBufferEntries.reduce(
+    (sum, e) => sum + (timeToMinutes(e.end) - timeToMinutes(e.start)),
+    0
+  );
+  const freeMins = Math.max(0, TOTAL_MINUTES - totalScheduledMins);
 
   const handleDelete = useCallback(
     (index: number) => {
-      const next = entries.filter((_, i) => i !== index);
-      onChange(next);
+      onChange(entries.filter((_, i) => i !== index));
     },
     [entries, onChange]
   );
@@ -108,13 +162,12 @@ export function InteractiveTimeline({ entries, onChange }: InteractiveTimelinePr
       e.preventDefault();
       e.stopPropagation();
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
-      const entry = entries[index];
       setDragState({
         index,
         mode,
         startY: e.clientY,
-        origStart: timeToMinutes(entry.start),
-        origEnd: timeToMinutes(entry.end),
+        origStart: timeToMinutes(entries[index].start),
+        origEnd: timeToMinutes(entries[index].end),
       });
     },
     [entries]
@@ -122,7 +175,7 @@ export function InteractiveTimeline({ entries, onChange }: InteractiveTimelinePr
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!dragState || !containerRef.current) return;
+      if (!dragState) return;
       const deltaY = e.clientY - dragState.startY;
       const deltaMins = (deltaY / TIMELINE_HEIGHT) * TOTAL_MINUTES;
 
@@ -136,9 +189,11 @@ export function InteractiveTimeline({ entries, onChange }: InteractiveTimelinePr
         entry.start = minutesToTime(newStart);
         entry.end = minutesToTime(newStart + duration);
       } else {
-        // resize
         let newEnd = snapToGrid(dragState.origEnd + deltaMins);
-        newEnd = Math.max(dragState.origStart + SNAP_MINUTES, Math.min(END_OF_DAY, newEnd));
+        newEnd = Math.max(
+          dragState.origStart + SNAP_MINUTES,
+          Math.min(END_OF_DAY, newEnd)
+        );
         entry.end = minutesToTime(newEnd);
       }
 
@@ -155,7 +210,7 @@ export function InteractiveTimeline({ entries, onChange }: InteractiveTimelinePr
   return (
     <div>
       {/* Summary bar */}
-      <div className="flex gap-4 mb-4 text-xs">
+      <div className="flex flex-wrap gap-3 mb-4 text-xs">
         <div className="bg-background rounded-lg border border-border px-3 py-2">
           <span className="text-muted">Scheduled: </span>
           <span className="font-mono text-foreground">
@@ -174,13 +229,14 @@ export function InteractiveTimeline({ entries, onChange }: InteractiveTimelinePr
         </div>
         {overlaps.size > 0 && (
           <div className="bg-red-400/10 rounded-lg border border-red-400/20 px-3 py-2 text-red-400">
-            {overlaps.size / 2} overlap{overlaps.size > 2 ? "s" : ""}
+            Overlapping items
           </div>
         )}
       </div>
 
       <p className="text-[10px] text-muted mb-3">
-        Drag to move, drag bottom edge to resize, hover for delete. Locked items cannot be moved.
+        Drag to move, drag bottom edge to resize, hover for delete. Locked items
+        cannot be moved.
       </p>
 
       {/* Timeline */}
@@ -209,7 +265,7 @@ export function InteractiveTimeline({ entries, onChange }: InteractiveTimelinePr
           );
         })}
 
-        {/* Entry blocks */}
+        {/* Entry blocks with column layout */}
         {entries.map((entry, i) => {
           if (entry.type === "buffer") return null;
 
@@ -221,6 +277,7 @@ export function InteractiveTimeline({ entries, onChange }: InteractiveTimelinePr
           const isLocked = LOCKED_TYPES.has(entry.type);
           const hasOverlap = overlaps.has(i);
           const isDragging = dragState?.index === i;
+          const { col, totalCols } = columns[i];
 
           return (
             <TimelineBlock
@@ -229,6 +286,8 @@ export function InteractiveTimeline({ entries, onChange }: InteractiveTimelinePr
               entry={entry}
               top={top}
               height={height}
+              col={col}
+              totalCols={totalCols}
               colors={colors}
               isLocked={isLocked}
               hasOverlap={hasOverlap}
@@ -248,6 +307,8 @@ function TimelineBlock({
   entry,
   top,
   height,
+  col,
+  totalCols,
   colors,
   isLocked,
   hasOverlap,
@@ -259,6 +320,8 @@ function TimelineBlock({
   entry: ScheduleEntry;
   top: number;
   height: number;
+  col: number;
+  totalCols: number;
   colors: { bg: string; border: string; text: string };
   isLocked: boolean;
   hasOverlap: boolean;
@@ -268,28 +331,34 @@ function TimelineBlock({
 }) {
   const isSuggested = entry.type === "suggested";
 
+  // Compute horizontal position based on column assignment
+  const availableWidth = `calc(100% - ${LEFT_GUTTER + 8}px)`; // 8px right margin
+  const colWidth = `calc(${availableWidth} / ${totalCols})`;
+  const colLeft = `calc(${LEFT_GUTTER}px + ${availableWidth} * ${col} / ${totalCols})`;
+
   return (
     <div
-      className={`absolute left-14 right-2 rounded-lg overflow-hidden group transition-shadow ${
+      className={`absolute rounded-lg overflow-hidden group transition-shadow ${
         isDragging ? "z-20 shadow-lg" : "z-10"
       } ${hasOverlap ? "ring-2 ring-red-400/60" : ""}`}
       style={{
         top: `${top}px`,
         height: `${Math.max(height, 20)}px`,
+        left: colLeft,
+        width: colWidth,
         backgroundColor: colors.bg,
         borderLeft: `3px ${isSuggested ? "dashed" : "solid"} ${colors.border}`,
         cursor: isLocked ? "default" : "grab",
         opacity: isDragging ? 0.85 : 1,
       }}
       onPointerDown={(e) => !isLocked && onPointerDown(index, "move", e)}
+      title={`${entry.activity}\n${formatTime(entry.start)} – ${formatTime(entry.end)}`}
     >
       {/* Content */}
-      <div className="px-2.5 py-1 h-full flex flex-col justify-center min-h-0">
-        <div className="flex items-center gap-1.5">
+      <div className="px-2 py-1 h-full flex flex-col justify-center min-h-0 overflow-hidden">
+        <div className="flex items-center gap-1">
           {isLocked && (
-            <span className="text-[9px] text-muted/50" title="Locked">
-              🔒
-            </span>
+            <span className="text-[9px] shrink-0 opacity-50">🔒</span>
           )}
           <span
             className="text-xs font-medium truncate"
@@ -299,16 +368,16 @@ function TimelineBlock({
           </span>
         </div>
         {height >= 30 && (
-          <span className="text-[10px] font-mono text-muted/70">
+          <span className="text-[10px] font-mono text-muted/70 truncate">
             {formatTime(entry.start)} – {formatTime(entry.end)}
           </span>
         )}
       </div>
 
-      {/* Delete button (hover, not for locked) */}
+      {/* Delete button */}
       {!isLocked && (
         <button
-          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-500/80 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30"
+          className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-red-500/80 text-white text-[9px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-30"
           onPointerDown={(e) => {
             e.stopPropagation();
             e.preventDefault();
@@ -323,14 +392,14 @@ function TimelineBlock({
         </button>
       )}
 
-      {/* Resize handle (bottom edge, not for locked) */}
+      {/* Resize handle */}
       {!isLocked && (
         <div
           className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize opacity-0 group-hover:opacity-100 transition-opacity z-30"
           style={{ backgroundColor: colors.border + "40" }}
           onPointerDown={(e) => onPointerDown(index, "resize", e)}
         >
-          <div className="mx-auto mt-0.5 w-6 h-0.5 rounded-full bg-foreground/30" />
+          <div className="mx-auto mt-0.5 w-5 h-0.5 rounded-full bg-foreground/30" />
         </div>
       )}
     </div>

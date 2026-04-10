@@ -3,13 +3,14 @@
 import { useCallback, useState, useEffect } from "react";
 import useSWR from "swr";
 import Link from "next/link";
-import { TimelineView } from "@/components/dashboard/TimelineView";
 import { GoalSummary } from "@/components/dashboard/GoalSummary";
-import { TasksByType } from "@/components/dashboard/TasksByType";
 import { MiniCalendar } from "@/components/dashboard/MiniCalendar";
-import { UpcomingEvents } from "@/components/dashboard/UpcomingEvents";
 import { CalendarEvents } from "@/components/dashboard/CalendarEvents";
 import { CommandBar } from "@/components/dashboard/CommandBar";
+import { FocusCard } from "@/components/dashboard/FocusCard";
+import { UpNext } from "@/components/dashboard/UpNext";
+import { DayScheduleList } from "@/components/dashboard/DayScheduleList";
+import { PomodoroTimer } from "@/components/dashboard/PomodoroTimer";
 import { useToast } from "@/components/layout/Toast";
 import { toLocalDateString, isSameDay } from "@/lib/utils";
 
@@ -46,13 +47,7 @@ interface DashboardData {
     estimatedMins: number;
     status: string;
   }[];
-  optimizedSchedule: {
-    start: string;
-    end: string;
-    activity: string;
-    type: string;
-    taskId?: string;
-  }[] | null;
+  optimizedSchedule: ScheduleItem[] | null;
   stats: {
     activeGoals: number;
     pendingTasks: number;
@@ -71,6 +66,14 @@ interface TaskItem {
   dueDate: string | null;
   goal: { id: string; title: string; category: string } | null;
   energyLevel: string;
+}
+
+interface ScheduleItem {
+  start: string;
+  end: string;
+  activity: string;
+  type: string;
+  taskId?: string;
 }
 
 interface CalendarEventItem {
@@ -106,13 +109,8 @@ function DashboardSkeleton() {
   return (
     <div className="flex flex-col lg:flex-row gap-6 max-w-full">
       <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between mb-8">
-          <div>
-            <div className="h-9 bg-border/30 rounded w-48 mb-2" />
-            <div className="h-4 bg-border/20 rounded w-64" />
-          </div>
-          <div className="h-10 bg-accent/30 rounded-lg w-44" />
-        </div>
+        <div className="h-9 bg-border/30 rounded w-48 mb-2" />
+        <div className="h-4 bg-border/20 rounded w-64 mb-6" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="bg-card rounded-xl border border-border p-4">
@@ -121,13 +119,13 @@ function DashboardSkeleton() {
             </div>
           ))}
         </div>
-        <div className="bg-card rounded-xl border border-border p-4 mb-6 h-12" />
-        <div className="bg-card rounded-xl border border-border p-5 h-64 mb-6" />
-        <div className="bg-card rounded-xl border border-border p-5 h-48" />
+        <div className="bg-card rounded-xl border border-border p-6 h-40 mb-6" />
+        <div className="bg-card rounded-xl border border-border p-5 h-24 mb-6" />
+        <div className="bg-card rounded-xl border border-border p-4 h-12" />
       </div>
-      <div className="w-full lg:w-72 shrink-0 space-y-4">
+      <div className="w-full lg:w-80 shrink-0 space-y-4">
         <div className="bg-card rounded-xl border border-border p-4 h-[280px]" />
-        <div className="bg-card rounded-xl border border-border p-4 h-24" />
+        <div className="bg-card rounded-xl border border-border p-4 h-64" />
         <div className="bg-card rounded-xl border border-border p-4 h-32" />
       </div>
     </div>
@@ -137,6 +135,7 @@ function DashboardSkeleton() {
 function DashboardContent() {
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>([]);
+  const [pomodoroTask, setPomodoroTask] = useState<ScheduleItem | null>(null);
   const { toast } = useToast();
 
   const dateStr = toLocalDateString(selectedDate);
@@ -156,29 +155,21 @@ function DashboardContent() {
 
   const handleDateSelect = useCallback((date: Date) => {
     setSelectedDate(date);
-    setCalendarEvents([]); // clear stale events while new ones load
+    setCalendarEvents([]);
   }, []);
-
-  const handleStatusChange = useCallback(
-    async (id: string, status: string) => {
-      try {
-        await fetch("/api/tasks", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id, status }),
-        });
-        if (status === "completed") toast("Task completed!");
-        mutate();
-      } catch {
-        toast("Failed to update task", "error");
-      }
-    },
-    [mutate, toast]
-  );
 
   const handleItemsCreated = useCallback(() => {
     mutate();
   }, [mutate]);
+
+  const handleStartPomodoro = useCallback((item: ScheduleItem) => {
+    setPomodoroTask(item);
+  }, []);
+
+  const handlePomodoroComplete = useCallback(() => {
+    toast("Focus session complete!");
+    setPomodoroTask(null);
+  }, [toast]);
 
   const greeting = getGreeting();
   const dateLabel = isToday
@@ -197,13 +188,23 @@ function DashboardContent() {
 
   const stats = data?.stats;
   const isLoading = !data;
+  const schedule = data?.optimizedSchedule ?? null;
+
+  // Estimate pomodoro duration from schedule entry
+  const pomodoroMins = pomodoroTask
+    ? (() => {
+        const [sh, sm] = pomodoroTask.start.split(":").map(Number);
+        const [eh, em] = pomodoroTask.end.split(":").map(Number);
+        return eh * 60 + em - (sh * 60 + sm);
+      })()
+    : 30;
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 max-w-full">
       {/* Main content */}
       <div className="flex-1 min-w-0">
         {/* Header */}
-        <div className="flex items-start justify-between mb-8">
+        <div className="flex items-start justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold">
               {isToday ? greeting : "Schedule"}
@@ -251,41 +252,56 @@ function DashboardContent() {
           />
         </div>
 
+        {/* Pomodoro Timer (when active) */}
+        {pomodoroTask && (
+          <div className="mb-6">
+            <PomodoroTimer
+              taskName={pomodoroTask.activity}
+              estimatedMins={pomodoroMins}
+              onComplete={handlePomodoroComplete}
+              onClose={() => setPomodoroTask(null)}
+            />
+          </div>
+        )}
+
+        {/* Focus Card */}
+        {!pomodoroTask && isToday && (
+          <div className="mb-6">
+            <FocusCard
+              schedule={schedule ?? []}
+              onStartPomodoro={handleStartPomodoro}
+            />
+          </div>
+        )}
+
+        {/* Up Next */}
+        {isToday && schedule && (
+          <div className="mb-6">
+            <UpNext schedule={schedule} />
+          </div>
+        )}
+
         {/* AI Command Bar */}
         <div className="mb-6">
           <CommandBar onItemsCreated={handleItemsCreated} />
         </div>
-
-        {/* Timeline */}
-        <div className="mb-6">
-          <TimelineView
-            blocks={data?.todayBlocks ?? []}
-            calendarEvents={calendarEvents}
-            optimizedSchedule={data?.optimizedSchedule}
-          />
-        </div>
-
-        {/* Tasks by type */}
-        <TasksByType
-          goalTasks={data?.tasks.goalTasks ?? []}
-          todos={data?.tasks.todos ?? []}
-          events={data?.tasks.events ?? []}
-          onStatusChange={handleStatusChange}
-        />
       </div>
 
       {/* Right panel */}
-      <div className="w-full lg:w-72 shrink-0 space-y-4">
+      <div className="w-full lg:w-80 shrink-0 space-y-4">
         <MiniCalendar
           selectedDate={selectedDate}
           onDateSelect={handleDateSelect}
+        />
+        <DayScheduleList
+          schedule={schedule}
+          blocks={data?.todayBlocks ?? []}
         />
         <CalendarEvents
           selectedDate={selectedDate}
           onEventsLoaded={handleCalendarLoaded}
         />
         <GoalSummary goals={data?.goals ?? []} />
-        <UpcomingEvents events={data?.upcomingEvents ?? []} />
       </div>
     </div>
   );

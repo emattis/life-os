@@ -93,6 +93,23 @@ export async function PUT(request: NextRequest) {
     data.completedAt = null;
   }
 
+  // Log habit if completing a recurring task
+  if (data.status === "completed") {
+    const existingTask = await prisma.task.findUnique({
+      where: { id },
+      select: { recurring: true },
+    });
+    if (existingTask?.recurring) {
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      await prisma.habitLog.upsert({
+        where: { taskId_date: { taskId: id, date: dateStr } },
+        create: { taskId: id, date: dateStr, completed: true },
+        update: { completed: true },
+      });
+    }
+  }
+
   const task = await prisma.task.update({
     where: { id },
     data,

@@ -11,6 +11,7 @@ import { FocusCard } from "@/components/dashboard/FocusCard";
 import { UpNext } from "@/components/dashboard/UpNext";
 import { DayScheduleList } from "@/components/dashboard/DayScheduleList";
 import { PomodoroTimer } from "@/components/dashboard/PomodoroTimer";
+import { Streaks } from "@/components/dashboard/Streaks";
 import { useToast } from "@/components/layout/Toast";
 import { toLocalDateString, isSameDay } from "@/lib/utils";
 
@@ -278,6 +279,13 @@ function DashboardContent() {
         {isToday && schedule && (
           <div className="mb-6">
             <UpNext schedule={schedule} />
+          </div>
+        )}
+
+        {/* Streaks */}
+        {isToday && (
+          <div className="mb-6">
+            <Streaks />
           </div>
         )}
 

@@ -42,12 +42,15 @@ interface GoalCardProps {
     completedTasks: number;
     progress: number;
   };
-  onEdit: (goal: GoalCardProps["goal"]) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onClick?: (goal: any) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onEdit: (goal: any) => void;
   onArchive: (id: string, currentStatus: string) => void;
   onDelete: (id: string) => void;
 }
 
-export function GoalCard({ goal, onEdit, onArchive, onDelete }: GoalCardProps) {
+export function GoalCard({ goal, onClick, onEdit, onArchive, onDelete }: GoalCardProps) {
   const cat = CATEGORY_CONFIG[goal.category] ?? {
     icon: "🎯",
     label: goal.category,
@@ -70,7 +73,10 @@ export function GoalCard({ goal, onEdit, onArchive, onDelete }: GoalCardProps) {
     new Date(goal.targetDate) < new Date();
 
   return (
-    <div className="bg-card rounded-xl border border-border p-5 group hover:border-border/80 transition-colors flex flex-col">
+    <div
+      className="bg-card rounded-xl border border-border p-5 group hover:border-border/80 transition-colors flex flex-col cursor-pointer"
+      onClick={() => onClick?.(goal)}
+    >
       {/* Header row */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2">

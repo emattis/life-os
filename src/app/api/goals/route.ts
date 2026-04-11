@@ -16,8 +16,16 @@ export async function GET(request: NextRequest) {
       tasks: {
         select: {
           id: true,
+          title: true,
+          type: true,
+          priority: true,
           status: true,
+          estimatedMins: true,
+          dueDate: true,
+          energyLevel: true,
+          completedAt: true,
         },
+        orderBy: [{ status: "asc" }, { priority: "asc" }],
       },
     },
     orderBy: [{ priority: "asc" }, { createdAt: "desc" }],

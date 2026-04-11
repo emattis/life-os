@@ -4,7 +4,20 @@ import { useState, useCallback } from "react";
 import useSWR from "swr";
 import { GoalForm, type GoalFormData } from "@/components/goals/GoalForm";
 import { GoalCard } from "@/components/goals/GoalCard";
+import { GoalDetailPanel } from "@/components/goals/GoalDetailPanel";
 import { useToast } from "@/components/layout/Toast";
+
+interface GoalTask {
+  id: string;
+  title: string;
+  type: string;
+  priority: number;
+  status: string;
+  estimatedMins: number;
+  dueDate: string | null;
+  energyLevel: string;
+  completedAt: string | null;
+}
 
 interface GoalWithProgress {
   id: string;
@@ -17,6 +30,7 @@ interface GoalWithProgress {
   totalTasks: number;
   completedTasks: number;
   progress: number;
+  tasks: GoalTask[];
 }
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -43,6 +57,7 @@ export default function GoalsPage() {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<GoalFormData | undefined>();
+  const [selectedGoal, setSelectedGoal] = useState<GoalWithProgress | null>(null);
   const { toast } = useToast();
 
   const params = new URLSearchParams();
@@ -94,6 +109,7 @@ export default function GoalsPage() {
       status: goal.status,
     });
     setShowForm(true);
+    setSelectedGoal(null);
   }, []);
 
   const handleArchive = useCallback(
@@ -120,6 +136,7 @@ export default function GoalsPage() {
         await fetch(`/api/goals?id=${id}`, { method: "DELETE" });
         toast("Goal deleted");
         mutate();
+        setSelectedGoal(null);
       } catch {
         toast("Failed to delete goal", "error");
       }
@@ -131,6 +148,20 @@ export default function GoalsPage() {
     setShowForm(false);
     setEditing(undefined);
   }, []);
+
+  const handleGoalClick = useCallback((goal: GoalWithProgress) => {
+    setSelectedGoal(goal);
+  }, []);
+
+  const handleDetailRefresh = useCallback(() => {
+    mutate().then((data) => {
+      // Update the selected goal with fresh data
+      if (selectedGoal && data) {
+        const updated = data.find((g: GoalWithProgress) => g.id === selectedGoal.id);
+        if (updated) setSelectedGoal(updated);
+      }
+    });
+  }, [mutate, selectedGoal]);
 
   const activeCount = goals?.filter((g) => g.status === "active").length ?? 0;
   const totalProgress =
@@ -225,12 +256,22 @@ export default function GoalsPage() {
             <GoalCard
               key={goal.id}
               goal={goal}
+              onClick={handleGoalClick}
               onEdit={handleEdit}
               onArchive={handleArchive}
               onDelete={handleDelete}
             />
           ))}
         </div>
+      )}
+
+      {/* Detail panel */}
+      {selectedGoal && (
+        <GoalDetailPanel
+          goal={selectedGoal}
+          onClose={() => setSelectedGoal(null)}
+          onRefresh={handleDetailRefresh}
+        />
       )}
     </div>
   );

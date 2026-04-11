@@ -12,6 +12,7 @@ import { UpNext } from "@/components/dashboard/UpNext";
 import { DayScheduleList } from "@/components/dashboard/DayScheduleList";
 import { PomodoroTimer } from "@/components/dashboard/PomodoroTimer";
 import { Streaks } from "@/components/dashboard/Streaks";
+import { MorningBriefing } from "@/components/dashboard/MorningBriefing";
 import { useToast } from "@/components/layout/Toast";
 import { toLocalDateString, isSameDay } from "@/lib/utils";
 
@@ -219,6 +220,9 @@ function DashboardContent() {
             <span>✦</span> Optimize {isToday ? "My Day" : "This Day"}
           </Link>
         </div>
+
+        {/* Morning Briefing */}
+        {isToday && <MorningBriefing />}
 
         {/* Stat cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

@@ -65,6 +65,13 @@ model HabitLog {
   @@unique([taskId, date])
 }
 
+model DailyBriefing {
+  id        String   @id @default(cuid())
+  date      String   @unique // "YYYY-MM-DD"
+  content   String   // The AI-generated briefing text
+  createdAt DateTime @default(now())
+}
+
 model OptimizedDay {
   id        String   @id @default(cuid())
   date      String   // "2026-04-05"

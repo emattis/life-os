@@ -9,6 +9,16 @@ export async function GET(request: NextRequest) {
   const goalId = searchParams.get("goalId");
   const dueBefore = searchParams.get("dueBefore");
 
+  // Auto-cleanup: delete completed tasks older than 30 days
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  await prisma.task.deleteMany({
+    where: {
+      status: "completed",
+      completedAt: { lt: thirtyDaysAgo },
+    },
+  });
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const where: Record<string, any> = {};
   if (type) where.type = type;
@@ -16,6 +26,11 @@ export async function GET(request: NextRequest) {
   if (priority) where.priority = Number(priority);
   if (goalId) where.goalId = goalId;
   if (dueBefore) where.dueDate = { lte: new Date(dueBefore) };
+
+  // When no status filter, exclude completed (show only active tasks)
+  if (!status) {
+    where.status = { not: "completed" };
+  }
 
   const tasks = await prisma.task.findMany({
     where,

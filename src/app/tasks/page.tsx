@@ -328,6 +328,12 @@ export default function TasksPage() {
           ))}
         </div>
       )}
+
+      {statusFilter === "completed" && (
+        <p className="text-[11px] text-muted/50 text-center mt-4">
+          Completed tasks are automatically removed after 30 days.
+        </p>
+      )}
     </div>
   );
 }
